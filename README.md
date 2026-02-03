@@ -123,10 +123,55 @@ Set two environment variables in production:
 | `RELIC_MASTER_KEY` | Your master key (from `config/relic.key`) |
 | `RELIC_ARTIFACT` | Contents of `config/relic.enc` |
 
+#### Vercel
+
+1. Go to your project **Settings → Environment Variables**
+2. Add `RELIC_MASTER_KEY`:
+   ```bash
+   # Copy your master key
+   cat config/relic.key
+   ```
+3. Add `RELIC_ARTIFACT`:
+   ```bash
+   # Copy the entire artifact file content
+   cat config/relic.enc
+   ```
+4. Select which environments (Production, Preview, Development)
+
+> **Tip:** For large artifacts, use Vercel CLI:
+> ```bash
+> vercel env add RELIC_MASTER_KEY
+> vercel env add RELIC_ARTIFACT
+> ```
+
+#### Cloudflare Workers
+
 ```bash
-# Export from local key file
+# Using wrangler secrets
+wrangler secret put RELIC_MASTER_KEY
+wrangler secret put RELIC_ARTIFACT
+
+# Or in wrangler.toml (not recommended for secrets)
+[vars]
+RELIC_ARTIFACT = "..."
+```
+
+#### Other Platforms
+
+```bash
+# Generic - export from local files
 export RELIC_MASTER_KEY=$(cat config/relic.key)
 export RELIC_ARTIFACT=$(cat config/relic.enc)
+
+# Docker
+docker run -e RELIC_MASTER_KEY="$(cat config/relic.key)" \
+           -e RELIC_ARTIFACT="$(cat config/relic.enc)" \
+           your-image
+
+# GitHub Actions (add as repository secrets, then reference)
+env:
+  RELIC_MASTER_KEY: ${{ secrets.RELIC_MASTER_KEY }}
+  RELIC_ARTIFACT: ${{ secrets.RELIC_ARTIFACT }}
 ```
 
 ---
