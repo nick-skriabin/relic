@@ -363,6 +363,61 @@ To use a custom path:
 const relic = createRelic({ localOverrides: "./secrets/local.json" });
 ```
 
+### Public Secrets (Frontend-Safe)
+
+Relic supports exposing certain secrets to the frontend via a special `public` key. This works similarly to `NEXT_PUBLIC_` environment variables in Next.js.
+
+Structure your secrets with a `public` key:
+
+```json
+{
+  "DATABASE_URL": "postgres://secret-host/db",
+  "API_KEY": "sk_live_secret",
+  "public": {
+    "API_URL": "https://api.example.com",
+    "APP_NAME": "My App",
+    "STRIPE_PUBLIC_KEY": "pk_live_..."
+  }
+}
+```
+
+Use `loadPublic()` to get only the public secrets:
+
+```typescript
+// Server-side: access everything
+const secrets = await relic.load();
+secrets.DATABASE_URL;  // ✓ Available
+secrets.public.API_URL; // ✓ Available
+
+// Frontend-safe: only public secrets
+const publicSecrets = await relic.loadPublic();
+// => { API_URL: "...", APP_NAME: "...", STRIPE_PUBLIC_KEY: "..." }
+```
+
+**Next.js example:**
+
+```typescript
+// app/layout.tsx (Server Component)
+import { relic } from "@/lib/relic";
+
+export default async function RootLayout({ children }) {
+  const publicSecrets = await relic.loadPublic();
+
+  return (
+    <html>
+      <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__PUBLIC_CONFIG__ = ${JSON.stringify(publicSecrets)}`,
+          }}
+        />
+        {children}
+      </body>
+    </html>
+  );
+}
+```
+
 ---
 
 ## API
@@ -404,7 +459,11 @@ const relic = createRelic({
 ```typescript
 // Load all secrets as an object
 const secrets = await relic.load();
-// => { API_KEY: "...", DATABASE_URL: "...", ... }
+// => { API_KEY: "...", DATABASE_URL: "...", public: { ... } }
+
+// Load only public secrets (safe for frontend)
+const publicSecrets = await relic.loadPublic();
+// => { API_URL: "...", APP_NAME: "..." }
 
 // Get a specific secret (throws if not found)
 const apiKey = await relic.get("API_KEY");
@@ -416,7 +475,7 @@ if (await relic.has("OPTIONAL_KEY")) {
 
 // List all available keys
 const keys = await relic.keys();
-// => ["API_KEY", "DATABASE_URL", ...]
+// => ["API_KEY", "DATABASE_URL", "public", ...]
 ```
 
 ### Low-Level Functions

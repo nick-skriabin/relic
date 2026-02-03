@@ -36,8 +36,10 @@ export interface RelicOptions {
  * Relic instance interface
  */
 export interface RelicInstance {
-  /** Load and decrypt secrets, returns cached result if available */
+  /** Load and decrypt all secrets, returns cached result if available */
   load(): Promise<SecretsData>;
+  /** Load only public secrets (from the "public" key), safe for frontend exposure */
+  loadPublic(): Promise<SecretsData>;
   /** Get a specific secret by key, throws if not found */
   get(key: string): Promise<unknown>;
   /** Check if a key exists */

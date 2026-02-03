@@ -337,8 +337,24 @@ export function createRelic(options?: RelicOptions): RelicInstance {
     return Object.keys(secrets);
   }
 
+  /**
+   * Load only public secrets (from the "public" key)
+   * Safe for frontend exposure
+   */
+  async function loadPublic(): Promise<SecretsData> {
+    const secrets = await load();
+    const publicSecrets = secrets.public;
+
+    if (!publicSecrets || typeof publicSecrets !== "object" || Array.isArray(publicSecrets)) {
+      return {};
+    }
+
+    return publicSecrets as SecretsData;
+  }
+
   return {
     load,
+    loadPublic,
     get,
     has,
     keys,
