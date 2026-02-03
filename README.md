@@ -19,6 +19,8 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/nicholasrq/relic/actions/workflows/ci.yml"><img src="https://github.com/nicholasrq/relic/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@nick-skriabin/relic"><img src="https://img.shields.io/npm/v/@nick-skriabin/relic?color=cb3837&logo=npm" alt="npm"></a>
   <img src="https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white" alt="Node.js 18+">
   <img src="https://img.shields.io/badge/Bun-1.0+-f9f1e1?logo=bun&logoColor=black" alt="Bun">
   <img src="https://img.shields.io/badge/Edge-Ready-orange?logo=cloudflare&logoColor=white" alt="Edge Ready">
@@ -64,16 +66,16 @@ Managing secrets in JavaScript applications is painful. Environment variables sc
 
 ```bash
 # npm
-npm install relic
+npm install @nick-skriabin/relic
 
 # pnpm
-pnpm add relic
+pnpm add @nick-skriabin/relic
 
 # yarn
-yarn add relic
+yarn add @nick-skriabin/relic
 
 # bun
-bun add relic
+bun add @nick-skriabin/relic
 ```
 
 ---
@@ -115,7 +117,7 @@ Save and close. Relic encrypts and writes to `config/relic.enc`.
 ### 3. Use in Your App
 
 ```typescript
-import { createRelic } from "relic";
+import { createRelic } from "@nick-skriabin/relic";
 
 const relic = createRelic();
 
@@ -205,7 +207,7 @@ relic edit --file ./secrets/production.enc
 Creates a Relic instance for accessing secrets.
 
 ```typescript
-import { createRelic } from "relic";
+import { createRelic } from "@nick-skriabin/relic";
 
 const relic = createRelic({
   // Provide artifact directly (for bundling/Edge)
@@ -250,7 +252,7 @@ const keys = await relic.keys();
 For advanced use cases, you can use the encryption functions directly:
 
 ```typescript
-import { encryptPayload, decryptPayload } from "relic";
+import { encryptPayload, decryptPayload } from "@nick-skriabin/relic";
 
 // Encrypt
 const artifact = await encryptPayload(
@@ -273,7 +275,7 @@ Relic is designed from the ground up to work in Edge environments where Node.js 
 
 ```typescript
 // src/worker.ts
-import { createRelic } from "relic";
+import { createRelic } from "@nick-skriabin/relic";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -300,7 +302,7 @@ RELIC_ARTIFACT = "..." # Or use wrangler secret put
 
 ```typescript
 // app/api/route.ts
-import { createRelic } from "relic";
+import { createRelic } from "@nick-skriabin/relic";
 
 export const runtime = "edge";
 
@@ -319,7 +321,7 @@ export async function GET() {
 
 ```typescript
 // middleware.ts
-import { createRelic } from "relic";
+import { createRelic } from "@nick-skriabin/relic";
 
 export async function middleware(request: Request) {
   const relic = createRelic({
@@ -339,7 +341,7 @@ export const config = {
 ### Deno / Deno Deploy
 
 ```typescript
-import { createRelic } from "npm:relic";
+import { createRelic } from "npm:@nick-skriabin/relic";
 
 const relic = createRelic({
   artifact: Deno.env.get("RELIC_ARTIFACT"),
@@ -380,7 +382,7 @@ const relic = createRelic({
 Relic throws `RelicError` with specific error codes for easy handling:
 
 ```typescript
-import { createRelic, RelicError, ErrorCodes } from "relic";
+import { createRelic, RelicError, ErrorCodes } from "@nick-skriabin/relic";
 
 const relic = createRelic();
 
@@ -579,7 +581,7 @@ import {
   type RelicOptions,
   type RelicInstance,
   type SecretsData,
-} from "relic";
+} from "@nick-skriabin/relic";
 
 // Type your secrets
 interface MySecrets {

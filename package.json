@@ -1,5 +1,5 @@
 {
-  "name": "relic",
+  "name": "@nick-skriabin/relic",
   "version": "1.0.0",
   "description": "Rails-credentials-like encrypted secrets for JS apps - works in Node and Edge runtimes",
   "type": "module",
