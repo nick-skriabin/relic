@@ -193,21 +193,33 @@ async function initCommand(keyFile: string, artifactFile: string, iterations?: n
     process.exit(0);
   }
 
-  // Don't override existing key file
-  if (keyExists) {
-    console.log(`Key file already exists: ${keyFile}`);
-    console.log("To regenerate, delete the file first.");
-    process.exit(1);
+  // If both exist, already initialized
+  if (keyExists && artifactExists) {
+    console.log("Relic is already initialized.");
+    console.log(`  Key file: ${keyFile}`);
+    console.log(`  Artifact: ${artifactFile}`);
+    process.exit(0);
   }
 
-  // Don't override existing artifact file
-  if (artifactExists) {
-    console.log(`Artifact file already exists: ${artifactFile}`);
-    console.log("To reinitialize, delete both key and artifact files first.");
-    process.exit(1);
+  // If key exists but artifact doesn't, create artifact using existing key
+  if (keyExists && !artifactExists) {
+    const key = readFileSync(keyFilePath, "utf-8").trim();
+
+    const artifactDir = dirname(artifactFilePath);
+    if (!existsSync(artifactDir)) {
+      mkdirSync(artifactDir, { recursive: true });
+    }
+
+    const emptySecrets = JSON.stringify({}, null, 2) + "\n";
+    const encryptOptions = iterations ? { iterations } : undefined;
+    const artifact = await encryptPayload(key, emptySecrets, encryptOptions);
+    writeFileSync(artifactFilePath, artifact, "utf-8");
+    console.log(`✓ Created encrypted secrets: ${artifactFile}`);
+    console.log(`  (using existing key from ${keyFile})`);
+    return;
   }
 
-  // Generate key
+  // Neither exists - full initialization
   const key = generateKey();
 
   // Ensure directories exist

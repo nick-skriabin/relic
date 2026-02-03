@@ -286,15 +286,16 @@ echo "invalid json" > "$1"
       expect(gitignore).toContain(keyFile);
     });
 
-    test("fails if key file already exists", async () => {
+    test("creates artifact if key file exists but artifact does not", async () => {
       const keyFile = testPath("config/relic.key");
       const artifactFile = testPath("config/relic.enc");
 
       // Create key file first
       mkdirSync(dirname(keyFile), { recursive: true });
-      writeFileSync(keyFile, "existing-key\n", "utf-8");
+      const existingKey = "existing-key-for-test-12345678901234567890";
+      writeFileSync(keyFile, existingKey + "\n", "utf-8");
 
-      const proc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile, "--file", artifactFile], {
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile, "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
         cwd: TEST_DIR,
         env: process.env,
         stdout: "pipe",
@@ -304,8 +305,15 @@ echo "invalid json" > "$1"
       const exitCode = await proc.exited;
       const stdout = await new Response(proc.stdout).text();
 
-      expect(exitCode).not.toBe(0);
-      expect(stdout).toContain("already exists");
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("Created encrypted secrets");
+      expect(stdout).toContain("using existing key");
+      expect(existsSync(artifactFile)).toBe(true);
+
+      // Artifact should be decryptable with the existing key
+      const artifact = readFileSync(artifactFile, "utf-8");
+      const decrypted = await decryptPayload(existingKey, artifact);
+      expect(JSON.parse(decrypted)).toEqual({});
     });
 
     test("exits gracefully if artifact exists but key file does not (env var user)", async () => {
@@ -333,14 +341,13 @@ echo "invalid json" > "$1"
       expect(existsSync(keyFile)).toBe(false);
     });
 
-    test("fails if artifact file already exists with key file", async () => {
+    test("exits gracefully if both key and artifact files exist (already initialized)", async () => {
       const keyFile = testPath("config/relic.key");
       const artifactFile = testPath("config/relic.enc");
 
-      // Create only artifact file (key file doesn't exist yet, but will try to create)
+      // Create both files
       mkdirSync(dirname(artifactFile), { recursive: true });
       writeFileSync(artifactFile, '{"v":1}', "utf-8");
-      // Now also create key file to trigger the "both exist" check
       writeFileSync(keyFile, "key\n", "utf-8");
 
       const proc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile, "--file", artifactFile], {
@@ -353,8 +360,8 @@ echo "invalid json" > "$1"
       const exitCode = await proc.exited;
       const stdout = await new Response(proc.stdout).text();
 
-      expect(exitCode).not.toBe(0);
-      expect(stdout).toContain("already exists");
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("already initialized");
     });
 
     test("does not duplicate gitignore entry", async () => {
