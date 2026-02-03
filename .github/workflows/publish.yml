@@ -1,6 +1,9 @@
 name: Publish
 
 on:
+  release:
+    types: [published]
+
   workflow_dispatch:
     inputs:
       version:
@@ -61,11 +64,16 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            # Use specified version
-            VERSION="${{ inputs.version }}"
-            # Remove 'v' prefix if present
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Use version from release tag
+            VERSION="${{ github.event.release.tag_name }}"
             VERSION="${VERSION#v}"
+            echo "source=release" >> $GITHUB_OUTPUT
+          elif [ -n "${{ inputs.version }}" ]; then
+            # Use manually specified version
+            VERSION="${{ inputs.version }}"
+            VERSION="${VERSION#v}"
+            echo "source=manual" >> $GITHUB_OUTPUT
           else
             # Auto-bump version
             CURRENT=$(node -p "require('./package.json').version")
@@ -87,6 +95,7 @@ jobs:
             esac
 
             VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            echo "source=auto" >> $GITHUB_OUTPUT
           fi
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -101,13 +110,15 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-      - name: Commit version bump
+      - name: Commit and tag version
+        if: steps.version.outputs.source != 'release'
         run: |
           git add package.json
           git commit -m "chore: release v${{ steps.version.outputs.version }}"
           git tag "v${{ steps.version.outputs.version }}"
 
       - name: Push changes
+        if: steps.version.outputs.source != 'release'
         run: |
           git push origin main
           git push origin "v${{ steps.version.outputs.version }}"
@@ -118,6 +129,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
+        if: steps.version.outputs.source != 'release'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
@@ -129,6 +141,7 @@ jobs:
           echo "## 🚀 Published!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**npm:** https://www.npmjs.com/package/@nick-skriabin/relic/v/${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
