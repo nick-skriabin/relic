@@ -6,11 +6,15 @@ import { decryptPayload } from "../src/index.ts";
 
 // Use a unique temp directory for each test run
 const TEST_DIR = join(tmpdir(), `relic-cli-test-${Date.now()}`);
-const ARTIFACT_FILE = join(TEST_DIR, "config", "relic.enc");
+const PROJECT_ROOT = dirname(dirname(import.meta.path));
+const CLI_PATH = join(PROJECT_ROOT, "src/cli/index.ts");
 const MASTER_KEY = "test-cli-master-key-12345";
 
 // Low iterations for fast tests
 const TEST_ITERATIONS = 1000;
+
+// Helper to get absolute path in test dir
+const testPath = (relativePath: string) => join(TEST_DIR, relativePath);
 
 describe("CLI", () => {
   beforeEach(() => {
@@ -29,8 +33,9 @@ describe("CLI", () => {
 
   describe("relic edit", () => {
     test("creates new artifact file with empty object", async () => {
-      // Create a fake editor script that writes specific content
-      const editorScript = join(TEST_DIR, "editor.sh");
+      const artifactFile = testPath("config/relic.enc");
+      const editorScript = testPath("editor.sh");
+
       writeFileSync(
         editorScript,
         `#!/bin/bash
@@ -43,8 +48,8 @@ EOF
         { mode: 0o755 }
       );
 
-      const proc = Bun.spawn(["bun", "run", "./src/cli/index.ts", "edit", "--file", ARTIFACT_FILE, "--iterations", String(TEST_ITERATIONS)], {
-        cwd: dirname(dirname(import.meta.path)),
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
         env: {
           ...process.env,
           RELIC_MASTER_KEY: MASTER_KEY,
@@ -62,10 +67,9 @@ EOF
       }
 
       expect(exitCode).toBe(0);
-      expect(existsSync(ARTIFACT_FILE)).toBe(true);
+      expect(existsSync(artifactFile)).toBe(true);
 
-      // Verify the artifact can be decrypted
-      const artifact = readFileSync(ARTIFACT_FILE, "utf-8");
+      const artifact = readFileSync(artifactFile, "utf-8");
       const decrypted = await decryptPayload(MASTER_KEY, artifact);
       const data = JSON.parse(decrypted);
 
@@ -73,8 +77,9 @@ EOF
     });
 
     test("edits existing artifact file", async () => {
-      // First, create an initial artifact
-      const initialScript = join(TEST_DIR, "initial-editor.sh");
+      const artifactFile = testPath("config/relic.enc");
+      const initialScript = testPath("initial-editor.sh");
+
       writeFileSync(
         initialScript,
         `#!/bin/bash
@@ -87,9 +92,8 @@ EOF
         { mode: 0o755 }
       );
 
-      // Create initial artifact
-      const createProc = Bun.spawn(["bun", "run", "./src/cli/index.ts", "edit", "--file", ARTIFACT_FILE, "--iterations", String(TEST_ITERATIONS)], {
-        cwd: dirname(dirname(import.meta.path)),
+      const createProc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
         env: {
           ...process.env,
           RELIC_MASTER_KEY: MASTER_KEY,
@@ -100,8 +104,7 @@ EOF
       });
       await createProc.exited;
 
-      // Now update the artifact with a new editor script
-      const updateScript = join(TEST_DIR, "update-editor.sh");
+      const updateScript = testPath("update-editor.sh");
       writeFileSync(
         updateScript,
         `#!/bin/bash
@@ -115,8 +118,8 @@ EOF
         { mode: 0o755 }
       );
 
-      const updateProc = Bun.spawn(["bun", "run", "./src/cli/index.ts", "edit", "--file", ARTIFACT_FILE, "--iterations", String(TEST_ITERATIONS)], {
-        cwd: dirname(dirname(import.meta.path)),
+      const updateProc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
         env: {
           ...process.env,
           RELIC_MASTER_KEY: MASTER_KEY,
@@ -128,8 +131,7 @@ EOF
 
       await updateProc.exited;
 
-      // Verify updated content
-      const artifact = readFileSync(ARTIFACT_FILE, "utf-8");
+      const artifact = readFileSync(artifactFile, "utf-8");
       const decrypted = await decryptPayload(MASTER_KEY, artifact);
       const data = JSON.parse(decrypted);
 
@@ -138,12 +140,14 @@ EOF
     });
 
     test("fails without master key", async () => {
-      const proc = Bun.spawn(["bun", "run", "./src/cli/index.ts", "edit", "--file", ARTIFACT_FILE], {
-        cwd: dirname(dirname(import.meta.path)),
+      const artifactFile = testPath("config/relic.enc");
+
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile], {
+        cwd: TEST_DIR,
         env: {
           ...process.env,
-          RELIC_MASTER_KEY: undefined, // Explicitly unset
-          RELIC_EDITOR: "true", // No-op editor
+          RELIC_MASTER_KEY: undefined,
+          RELIC_EDITOR: "true",
         },
         stdout: "pipe",
         stderr: "pipe",
@@ -157,8 +161,9 @@ EOF
     });
 
     test("fails if editor produces invalid JSON", async () => {
-      // Create editor script that produces invalid JSON
-      const badEditorScript = join(TEST_DIR, "bad-editor.sh");
+      const artifactFile = testPath("config/relic.enc");
+      const badEditorScript = testPath("bad-editor.sh");
+
       writeFileSync(
         badEditorScript,
         `#!/bin/bash
@@ -167,8 +172,8 @@ echo "not valid json" > "$1"
         { mode: 0o755 }
       );
 
-      const proc = Bun.spawn(["bun", "run", "./src/cli/index.ts", "edit", "--file", ARTIFACT_FILE, "--iterations", String(TEST_ITERATIONS)], {
-        cwd: dirname(dirname(import.meta.path)),
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
         env: {
           ...process.env,
           RELIC_MASTER_KEY: MASTER_KEY,
@@ -186,8 +191,9 @@ echo "not valid json" > "$1"
     });
 
     test("does not overwrite on invalid JSON", async () => {
-      // First, create a valid artifact
-      const goodEditorScript = join(TEST_DIR, "good-editor.sh");
+      const artifactFile = testPath("config/relic.enc");
+      const goodEditorScript = testPath("good-editor.sh");
+
       writeFileSync(
         goodEditorScript,
         `#!/bin/bash
@@ -200,8 +206,8 @@ EOF
         { mode: 0o755 }
       );
 
-      const createProc = Bun.spawn(["bun", "run", "./src/cli/index.ts", "edit", "--file", ARTIFACT_FILE, "--iterations", String(TEST_ITERATIONS)], {
-        cwd: dirname(dirname(import.meta.path)),
+      const createProc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
         env: {
           ...process.env,
           RELIC_MASTER_KEY: MASTER_KEY,
@@ -212,11 +218,9 @@ EOF
       });
       await createProc.exited;
 
-      // Get the artifact contents
-      const originalArtifact = readFileSync(ARTIFACT_FILE, "utf-8");
+      const originalArtifact = readFileSync(artifactFile, "utf-8");
 
-      // Now try to update with invalid JSON
-      const badEditorScript = join(TEST_DIR, "bad-editor.sh");
+      const badEditorScript = testPath("bad-editor.sh");
       writeFileSync(
         badEditorScript,
         `#!/bin/bash
@@ -225,8 +229,8 @@ echo "invalid json" > "$1"
         { mode: 0o755 }
       );
 
-      const badProc = Bun.spawn(["bun", "run", "./src/cli/index.ts", "edit", "--file", ARTIFACT_FILE, "--iterations", String(TEST_ITERATIONS)], {
-        cwd: dirname(dirname(import.meta.path)),
+      const badProc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
         env: {
           ...process.env,
           RELIC_MASTER_KEY: MASTER_KEY,
@@ -238,16 +242,255 @@ echo "invalid json" > "$1"
 
       await badProc.exited;
 
-      // Artifact should be unchanged
-      const currentArtifact = readFileSync(ARTIFACT_FILE, "utf-8");
+      const currentArtifact = readFileSync(artifactFile, "utf-8");
       expect(currentArtifact).toBe(originalArtifact);
+    });
+  });
+
+  describe("relic init", () => {
+    test("creates key file, artifact file, and adds key to gitignore", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/relic.enc");
+      const gitignoreFile = testPath(".gitignore");
+
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile, "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(existsSync(keyFile)).toBe(true);
+      expect(existsSync(artifactFile)).toBe(true);
+      expect(stdout).toContain("Generated master key");
+      expect(stdout).toContain("Created encrypted secrets");
+      expect(stdout).toContain(".gitignore");
+
+      // Key should be valid base64
+      const key = readFileSync(keyFile, "utf-8").trim();
+      expect(key.length).toBeGreaterThan(20);
+      expect(() => Buffer.from(key, "base64")).not.toThrow();
+
+      // Artifact should be decryptable with the key
+      const artifact = readFileSync(artifactFile, "utf-8");
+      const decrypted = await decryptPayload(key, artifact);
+      expect(JSON.parse(decrypted)).toEqual({});
+
+      // Should be added to gitignore
+      expect(existsSync(gitignoreFile)).toBe(true);
+      const gitignore = readFileSync(gitignoreFile, "utf-8");
+      expect(gitignore).toContain(keyFile);
+    });
+
+    test("fails if key file already exists", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/relic.enc");
+
+      // Create key file first
+      mkdirSync(dirname(keyFile), { recursive: true });
+      writeFileSync(keyFile, "existing-key\n", "utf-8");
+
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile, "--file", artifactFile], {
+        cwd: TEST_DIR,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).not.toBe(0);
+      expect(stdout).toContain("already exists");
+    });
+
+    test("exits gracefully if artifact exists but key file does not (env var user)", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/relic.enc");
+
+      // Create only artifact file (simulating env var user)
+      mkdirSync(dirname(artifactFile), { recursive: true });
+      writeFileSync(artifactFile, '{"v":1}', "utf-8");
+
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile, "--file", artifactFile], {
+        cwd: TEST_DIR,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("RELIC_MASTER_KEY");
+      expect(stdout).toContain("No initialization needed");
+      // Key file should NOT be created
+      expect(existsSync(keyFile)).toBe(false);
+    });
+
+    test("fails if artifact file already exists with key file", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/relic.enc");
+
+      // Create only artifact file (key file doesn't exist yet, but will try to create)
+      mkdirSync(dirname(artifactFile), { recursive: true });
+      writeFileSync(artifactFile, '{"v":1}', "utf-8");
+      // Now also create key file to trigger the "both exist" check
+      writeFileSync(keyFile, "key\n", "utf-8");
+
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile, "--file", artifactFile], {
+        cwd: TEST_DIR,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).not.toBe(0);
+      expect(stdout).toContain("already exists");
+    });
+
+    test("does not duplicate gitignore entry", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/relic.enc");
+      const gitignoreFile = testPath(".gitignore");
+
+      // Create gitignore with existing entry
+      writeFileSync(gitignoreFile, `${keyFile}\nnode_modules\n`, "utf-8");
+
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile, "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("already in .gitignore");
+
+      // Should not have duplicate
+      const gitignore = readFileSync(gitignoreFile, "utf-8");
+      const escapedKeyFile = keyFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const matches = gitignore.match(new RegExp(escapedKeyFile, "g"));
+      expect(matches?.length).toBe(1);
+    });
+  });
+
+  describe("key file usage", () => {
+    test("uses key file when present instead of env var", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/relic.enc");
+
+      // Initialize to create key file
+      const initProc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile], {
+        cwd: TEST_DIR,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await initProc.exited;
+
+      // Read the generated key
+      const generatedKey = readFileSync(keyFile, "utf-8").trim();
+
+      // Create editor script
+      const editorScript = testPath("editor.sh");
+      writeFileSync(
+        editorScript,
+        `#!/bin/bash
+cat > "$1" << 'EOF'
+{
+  "SECRET": "from-key-file"
+}
+EOF
+`,
+        { mode: 0o755 }
+      );
+
+      // Edit without setting RELIC_MASTER_KEY - should use key file
+      const editProc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--key-file", keyFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
+        env: {
+          ...process.env,
+          RELIC_MASTER_KEY: undefined,
+          RELIC_EDITOR: editorScript,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await editProc.exited;
+      expect(exitCode).toBe(0);
+
+      // Verify artifact can be decrypted with the generated key
+      const artifact = readFileSync(artifactFile, "utf-8");
+      const decrypted = await decryptPayload(generatedKey, artifact);
+      const data = JSON.parse(decrypted);
+
+      expect(data.SECRET).toBe("from-key-file");
+    });
+
+    test("prefers key file over env var", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/relic.enc");
+
+      // Create key file with specific key
+      mkdirSync(dirname(keyFile), { recursive: true });
+      const fileKey = "file-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      writeFileSync(keyFile, fileKey + "\n", "utf-8");
+
+      const editorScript = testPath("editor.sh");
+      writeFileSync(
+        editorScript,
+        `#!/bin/bash
+cat > "$1" << 'EOF'
+{
+  "TEST": "value"
+}
+EOF
+`,
+        { mode: 0o755 }
+      );
+
+      // Set both env var and key file - key file should win
+      const editProc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--key-file", keyFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
+        env: {
+          ...process.env,
+          RELIC_MASTER_KEY: "env-key-should-not-be-used",
+          RELIC_EDITOR: editorScript,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      await editProc.exited;
+
+      // Should decrypt with file key, not env key
+      const artifact = readFileSync(artifactFile, "utf-8");
+      const decrypted = await decryptPayload(fileKey, artifact);
+      expect(JSON.parse(decrypted).TEST).toBe("value");
+
+      // Should NOT decrypt with env key
+      await expect(decryptPayload("env-key-should-not-be-used", artifact)).rejects.toThrow();
     });
   });
 
   describe("relic --print-keys", () => {
     test("prints secret keys without values", async () => {
-      // First create an artifact
-      const editorScript = join(TEST_DIR, "editor.sh");
+      const artifactFile = testPath("config/relic.enc");
+      const editorScript = testPath("editor.sh");
+
       writeFileSync(
         editorScript,
         `#!/bin/bash
@@ -262,8 +505,8 @@ EOF
         { mode: 0o755 }
       );
 
-      const createProc = Bun.spawn(["bun", "run", "./src/cli/index.ts", "edit", "--file", ARTIFACT_FILE, "--iterations", String(TEST_ITERATIONS)], {
-        cwd: dirname(dirname(import.meta.path)),
+      const createProc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
         env: {
           ...process.env,
           RELIC_MASTER_KEY: MASTER_KEY,
@@ -274,9 +517,8 @@ EOF
       });
       await createProc.exited;
 
-      // Now print keys
-      const printProc = Bun.spawn(["bun", "run", "./src/cli/index.ts", "--print-keys", "--file", ARTIFACT_FILE], {
-        cwd: dirname(dirname(import.meta.path)),
+      const printProc = Bun.spawn(["bun", "run", CLI_PATH, "--print-keys", "--file", artifactFile], {
+        cwd: TEST_DIR,
         env: {
           ...process.env,
           RELIC_MASTER_KEY: MASTER_KEY,
@@ -292,7 +534,6 @@ EOF
       expect(stdout).toContain("API_KEY");
       expect(stdout).toContain("DB_PASSWORD");
       expect(stdout).toContain("FEATURE_FLAG");
-      // Should NOT contain actual values
       expect(stdout).not.toContain("secret1");
       expect(stdout).not.toContain("secret2");
     });

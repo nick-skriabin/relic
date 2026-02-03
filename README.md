@@ -82,18 +82,13 @@ bun add @nick-skriabin/relic
 
 ## Quick Start
 
-### 1. Generate a Master Key
+### 1. Initialize Relic
 
 ```bash
-# Using OpenSSL (recommended)
-export RELIC_MASTER_KEY=$(openssl rand -base64 32)
-
-# Or using Node.js
-export RELIC_MASTER_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
-
-# Save this key somewhere safe — you'll need it forever!
-echo $RELIC_MASTER_KEY  # Copy this to your password manager / secrets vault
+npx relic init
 ```
+
+This generates a master key and saves it to `config/relic.key` (automatically added to `.gitignore`).
 
 ### 2. Create Your Secrets
 
@@ -135,11 +130,12 @@ Set two environment variables in production:
 
 | Variable | Value |
 |----------|-------|
-| `RELIC_MASTER_KEY` | Your master key |
+| `RELIC_MASTER_KEY` | Your master key (from `config/relic.key`) |
 | `RELIC_ARTIFACT` | Contents of `config/relic.enc` |
 
 ```bash
-# Example: setting the artifact
+# Export from local key file
+export RELIC_MASTER_KEY=$(cat config/relic.key)
 export RELIC_ARTIFACT=$(cat config/relic.enc)
 ```
 
@@ -152,6 +148,9 @@ The CLI is the **only** way to modify secrets. This ensures secrets are always p
 ### Commands
 
 ```bash
+# Initialize relic (generates key file)
+relic init
+
 # Edit secrets (creates file if it doesn't exist)
 relic edit
 
@@ -163,6 +162,35 @@ relic --print-keys
 
 # Show help
 relic --help
+```
+
+### Local Development Setup
+
+The `init` command sets up relic for local development:
+
+```bash
+relic init
+```
+
+This:
+1. Generates a secure random master key
+2. Saves it to `config/relic.key`
+3. Adds `config/relic.key` to `.gitignore`
+
+Now you can use `relic edit` without setting environment variables.
+
+### Key Resolution Order
+
+Relic looks for the master key in this order:
+
+1. **Key file** (`config/relic.key`) — for local development
+2. **Environment variable** (`RELIC_MASTER_KEY`) — for CI/production
+
+```
+Local Development          Production/CI
+─────────────────          ─────────────
+config/relic.key    →      RELIC_MASTER_KEY env var
+(auto-generated)           (from secrets manager)
 ```
 
 ### Editor Configuration
@@ -181,21 +209,22 @@ export EDITOR="subl --wait"          # Use Sublime Text
 export EDITOR="nano"                 # Use Nano
 ```
 
-### Default File Location
+### Default File Locations
 
 ```
 your-project/
 ├── config/
-│   └── relic.enc    ← Default location
+│   ├── relic.key    ← Master key (git-ignored)
+│   └── relic.enc    ← Encrypted secrets (commit this)
 ├── src/
 └── package.json
 ```
 
-Override with `--file`:
+Override with `--file` and `--key-file`:
 
 ```bash
-relic edit --file ./secrets/staging.enc
-relic edit --file ./secrets/production.enc
+relic init --key-file ./secrets/master.key
+relic edit --file ./secrets/production.enc --key-file ./secrets/master.key
 ```
 
 ---

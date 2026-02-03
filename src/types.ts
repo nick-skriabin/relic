@@ -81,6 +81,7 @@ export const Defaults = {
   ARTIFACT_ENV: "RELIC_ARTIFACT",
   MASTER_KEY_ENV: "RELIC_MASTER_KEY",
   ARTIFACT_FILE: "config/relic.enc",
+  KEY_FILE: "config/relic.key",
   KDF_ITERATIONS: 150_000,
   SALT_BYTES: 16,
   IV_BYTES: 12,
