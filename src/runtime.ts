@@ -28,25 +28,98 @@ const globalCache = new Map<string, SecretsData>();
  */
 const fileCache = new Map<string, string>();
 
+type FsModule = typeof import("fs");
+
 /**
- * Read a file from the filesystem (Node.js only)
+ * Cached fs module - lazy initialized
+ */
+let cachedFs: FsModule | null | undefined;
+let fsInitPromise: Promise<FsModule | null> | null = null;
+
+/**
+ * Try to get the fs module that works in the current environment
+ */
+async function getFsModule(): Promise<FsModule | null> {
+  if (cachedFs !== undefined) {
+    return cachedFs;
+  }
+
+  // Prevent multiple concurrent initializations
+  if (fsInitPromise) {
+    return fsInitPromise;
+  }
+
+  fsInitPromise = (async () => {
+    // Bun runtime - use import.meta.require
+    if (typeof Bun !== "undefined" && typeof import.meta.require === "function") {
+      try {
+        cachedFs = import.meta.require("fs") as FsModule;
+        return cachedFs;
+      } catch {
+        // fs not available
+      }
+    }
+
+    // Node.js CJS - try globalThis.require
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const globalRequire = new Function(
+        "return typeof require !== 'undefined' ? require : null"
+      )();
+      if (globalRequire) {
+        cachedFs = globalRequire("fs") as FsModule;
+        return cachedFs;
+      }
+    } catch {
+      // require not available
+    }
+
+    // Node.js ESM - use dynamic import
+    // Use indirect import via Function to avoid static analysis by Edge bundlers
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const dynamicImport = new Function("m", "return import(m)") as (
+        m: string
+      ) => Promise<FsModule>;
+      const fs = await dynamicImport("node:fs");
+      cachedFs = fs;
+      return cachedFs;
+    } catch {
+      // Not in Node.js or fs not available
+    }
+
+    cachedFs = null;
+    return null;
+  })();
+
+  return fsInitPromise;
+}
+
+/**
+ * Read a file from the filesystem (Node.js/Bun only)
  * Throws a helpful error if running in Edge runtime
  */
-function readArtifactFile(filePath: string): string {
+async function readArtifactFile(filePath: string): Promise<string> {
   // Check file cache first
   if (fileCache.has(filePath)) {
     return fileCache.get(filePath)!;
   }
 
+  const fs = await getFsModule();
+  if (!fs) {
+    throw new Error(
+      `Cannot read artifact file in Edge runtime. ` +
+      `Use 'artifact' option with the file contents instead of 'artifactPath'.`
+    );
+  }
+
   try {
-    // Dynamic require to avoid bundler issues in Edge
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("fs");
     const content = fs.readFileSync(filePath, "utf-8");
     fileCache.set(filePath, content);
     return content;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND") {
+    const error = err as NodeJS.ErrnoException;
+    if (error.code === "MODULE_NOT_FOUND") {
       throw new Error(
         `Cannot read artifact file in Edge runtime. ` +
         `Use 'artifact' option with the file contents instead of 'artifactPath'.`
@@ -80,7 +153,7 @@ export function createRelic(options?: RelicOptions): RelicInstance {
   /**
    * Resolve the artifact string
    */
-  function getArtifact(): string {
+  async function getArtifact(): Promise<string> {
     // 1. Direct artifact string
     if (options?.artifact) {
       return options.artifact;
@@ -88,7 +161,7 @@ export function createRelic(options?: RelicOptions): RelicInstance {
 
     // 2. File path (Node.js only)
     if (options?.artifactPath) {
-      return readArtifactFile(options.artifactPath);
+      return await readArtifactFile(options.artifactPath);
     }
 
     // 3. Environment variable
@@ -117,7 +190,7 @@ export function createRelic(options?: RelicOptions): RelicInstance {
    * Load and decrypt secrets
    */
   async function load(): Promise<SecretsData> {
-    const artifact = getArtifact();
+    const artifact = await getArtifact();
     const masterKey = getMasterKey();
 
     // Cache key includes both artifact and master key
