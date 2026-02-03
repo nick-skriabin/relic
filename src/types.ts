@@ -13,8 +13,10 @@ export type SecretsData = Record<string, unknown>;
  * Options for createRelic
  */
 export interface RelicOptions {
-  /** The encrypted artifact string. If not provided, reads from artifactEnv */
+  /** The encrypted artifact string. If not provided, reads from artifactPath or artifactEnv */
   artifact?: string;
+  /** Path to the artifact file. Reads file at runtime (Node.js only, not Edge) */
+  artifactPath?: string;
   /** Environment variable name for artifact. Default: "RELIC_ARTIFACT" */
   artifactEnv?: string;
   /** Environment variable name for master key. Default: "RELIC_MASTER_KEY" */

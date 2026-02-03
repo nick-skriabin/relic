@@ -24,6 +24,39 @@ import {
 const globalCache = new Map<string, SecretsData>();
 
 /**
+ * Cache for file contents to avoid repeated file reads
+ */
+const fileCache = new Map<string, string>();
+
+/**
+ * Read a file from the filesystem (Node.js only)
+ * Throws a helpful error if running in Edge runtime
+ */
+function readArtifactFile(filePath: string): string {
+  // Check file cache first
+  if (fileCache.has(filePath)) {
+    return fileCache.get(filePath)!;
+  }
+
+  try {
+    // Dynamic require to avoid bundler issues in Edge
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs");
+    const content = fs.readFileSync(filePath, "utf-8");
+    fileCache.set(filePath, content);
+    return content;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND") {
+      throw new Error(
+        `Cannot read artifact file in Edge runtime. ` +
+        `Use 'artifact' option with the file contents instead of 'artifactPath'.`
+      );
+    }
+    throw err;
+  }
+}
+
+/**
  * Create a Relic instance for accessing encrypted secrets
  *
  * @example
@@ -32,9 +65,11 @@ const globalCache = new Map<string, SecretsData>();
  * const relic = createRelic();
  * const secrets = await relic.load();
  *
- * // With explicit artifact
+ * // With file path (Node.js only)
+ * const relic = createRelic({ artifactPath: "./config/relic.enc" });
+ *
+ * // With explicit artifact string (works everywhere)
  * const relic = createRelic({ artifact: myArtifactString });
- * const apiKey = await relic.get("API_KEY");
  * ```
  */
 export function createRelic(options?: RelicOptions): RelicInstance {
@@ -46,9 +81,17 @@ export function createRelic(options?: RelicOptions): RelicInstance {
    * Resolve the artifact string
    */
   function getArtifact(): string {
+    // 1. Direct artifact string
     if (options?.artifact) {
       return options.artifact;
     }
+
+    // 2. File path (Node.js only)
+    if (options?.artifactPath) {
+      return readArtifactFile(options.artifactPath);
+    }
+
+    // 3. Environment variable
     const envValue = getEnv(artifactEnv);
     if (!envValue) {
       throw missingArtifactError();

@@ -1,4 +1,7 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { writeFileSync, mkdirSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import {
   createRelic,
   encryptPayload,
@@ -8,6 +11,9 @@ import {
 
 // Use low iterations for faster tests
 const TEST_ITERATIONS = 1000;
+
+// Temp directory for file-based tests
+const TEST_DIR = join(tmpdir(), `relic-runtime-test-${Date.now()}`);
 
 describe("runtime", () => {
   const originalEnv = { ...process.env };
@@ -267,6 +273,72 @@ describe("runtime", () => {
       // Should be equal but different objects (different cache entries)
       expect(result1).toEqual(result2);
       expect(result1).not.toBe(result2);
+    });
+  });
+
+  describe("artifactPath option", () => {
+    beforeEach(() => {
+      mkdirSync(TEST_DIR, { recursive: true });
+    });
+
+    afterEach(() => {
+      try {
+        rmSync(TEST_DIR, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    test("loads artifact from file path", async () => {
+      const masterKey = "file-path-key";
+      const secrets = { FROM_FILE: "file-value" };
+      const artifact = await encryptPayload(
+        masterKey,
+        JSON.stringify(secrets),
+        { iterations: TEST_ITERATIONS }
+      );
+
+      const filePath = join(TEST_DIR, "test.enc");
+      writeFileSync(filePath, artifact, "utf-8");
+
+      const relic = createRelic({
+        artifactPath: filePath,
+        masterKey,
+      });
+
+      const loaded = await relic.load();
+      expect(loaded).toEqual(secrets);
+    });
+
+    test("caches file reads", async () => {
+      const masterKey = "file-cache-key";
+      const secrets = { CACHED_FILE: "value" };
+      const artifact = await encryptPayload(
+        masterKey,
+        JSON.stringify(secrets),
+        { iterations: TEST_ITERATIONS }
+      );
+
+      const filePath = join(TEST_DIR, "cached.enc");
+      writeFileSync(filePath, artifact, "utf-8");
+
+      const relic1 = createRelic({ artifactPath: filePath, masterKey });
+      const relic2 = createRelic({ artifactPath: filePath, masterKey });
+
+      const result1 = await relic1.load();
+      const result2 = await relic2.load();
+
+      // Should return same cached object (singleton + file cache)
+      expect(result1).toBe(result2);
+    });
+
+    test("throws on non-existent file", async () => {
+      const relic = createRelic({
+        artifactPath: join(TEST_DIR, "does-not-exist.enc"),
+        masterKey: "any-key",
+      });
+
+      await expect(relic.load()).rejects.toThrow();
     });
   });
 

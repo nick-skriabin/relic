@@ -123,26 +123,86 @@ Set two environment variables in production:
 | `RELIC_MASTER_KEY` | Your master key (from `config/relic.key`) |
 | `RELIC_ARTIFACT` | Contents of `config/relic.enc` |
 
-#### Vercel
+#### Vercel (Node.js runtime)
 
-1. Go to your project **Settings → Environment Variables**
-2. Add `RELIC_MASTER_KEY`:
-   ```bash
-   # Copy your master key
-   cat config/relic.key
-   ```
-3. Add `RELIC_ARTIFACT`:
-   ```bash
-   # Copy the entire artifact file content
-   cat config/relic.enc
-   ```
-4. Select which environments (Production, Preview, Development)
+Since the artifact is committed to your repo, Relic can read it directly. You only need to set `RELIC_MASTER_KEY`:
 
-> **Tip:** For large artifacts, use Vercel CLI:
-> ```bash
-> vercel env add RELIC_MASTER_KEY
-> vercel env add RELIC_ARTIFACT
-> ```
+1. Add `RELIC_MASTER_KEY` to Vercel Environment Variables (Settings → Environment Variables)
+   ```bash
+   cat config/relic.key  # Copy this value
+   ```
+
+2. Use `artifactPath` to read from the committed file:
+   ```typescript
+   // lib/relic.ts
+   import { createRelic } from "@nick-skriabin/relic";
+
+   export const relic = createRelic({
+     artifactPath: "./config/relic.enc",
+   });
+   ```
+
+3. Use anywhere in your app:
+   ```typescript
+   import { relic } from "@/lib/relic";
+
+   const secrets = await relic.load();
+   ```
+
+#### Vercel Edge Runtime
+
+Edge functions don't have filesystem access. Bundle the artifact at build time instead.
+
+**Next.js setup:**
+
+1. Configure webpack to handle `.enc` files in `next.config.js`:
+   ```js
+   /** @type {import('next').NextConfig} */
+   const nextConfig = {
+     webpack: (config) => {
+       config.module.rules.push({
+         test: /\.enc$/,
+         type: "asset/source",
+       });
+       return config;
+     },
+   };
+
+   module.exports = nextConfig;
+   ```
+
+2. Add type declaration (optional, for TypeScript):
+   ```typescript
+   // types/assets.d.ts
+   declare module "*.enc" {
+     const content: string;
+     export default content;
+   }
+   ```
+
+3. Import and use:
+   ```typescript
+   // lib/relic.ts
+   import { createRelic } from "@nick-skriabin/relic";
+   import artifact from "../config/relic.enc";
+
+   export const relic = createRelic({
+     artifact,
+   });
+   ```
+
+**Vite setup:**
+
+Vite supports raw imports natively:
+
+```typescript
+import { createRelic } from "@nick-skriabin/relic";
+import artifact from "./config/relic.enc?raw";
+
+export const relic = createRelic({
+  artifact,
+});
+```
 
 #### Cloudflare Workers
 
@@ -274,7 +334,10 @@ Creates a Relic instance for accessing secrets.
 import { createRelic } from "@nick-skriabin/relic";
 
 const relic = createRelic({
-  // Provide artifact directly (for bundling/Edge)
+  // Read artifact from file (Node.js only)
+  artifactPath: "./config/relic.enc",
+
+  // Or provide artifact directly (for Edge/bundling)
   artifact: "...",
 
   // Or specify env var name (default: "RELIC_ARTIFACT")
