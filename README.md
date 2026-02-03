@@ -34,19 +34,7 @@
 
 Managing secrets in JavaScript applications is painful. Environment variables scatter across `.env` files, CI configs, and deployment dashboards. Relic takes a different approach:
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│   secrets.json          MASTER KEY             config/relic.enc     │
-│   ┌───────────┐        ┌─────────┐          ┌────────────────────┐  │
-│   │ API_KEY   │   +    │ ******* │    =     │ {                  │  │
-│   │ DB_URL    │        │         │          │   "API_KEY": "...", │  │
-│   │ ...       │        └─────────┘          │   "DB_URL": "..."   │  │
-│   └───────────┘         (env var)           │ }                   │  │
-│                                              └────────────────────┘  │
-│                                               (commit this!)         │
-└──────────────────────────────────────────────────────────────────────┘
-```
+![Relic](./screenshots/relic.jpg)
 
 **One encrypted file. One master key. Git-friendly diffs. Works everywhere.**
 
