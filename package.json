@@ -1,12 +1,52 @@
 {
   "name": "relic",
-  "module": "index.ts",
+  "version": "1.0.0",
+  "description": "Rails-credentials-like encrypted secrets for JS apps - works in Node and Edge runtimes",
   "type": "module",
-  "private": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "relic": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build:lib && bun build:cli",
+    "build:lib": "bun build ./src/index.ts --outdir ./dist --target=browser --format=esm && bun run build:types",
+    "build:cli": "bun build ./src/cli/index.ts --outdir ./dist/cli --target=node --format=esm",
+    "build:types": "tsc --project tsconfig.build.json",
+    "test": "bun test",
+    "test:edge": "bun test tests/edge.test.ts",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "secrets",
+    "credentials",
+    "encryption",
+    "edge",
+    "cloudflare-workers",
+    "config"
+  ],
+  "author": "",
+  "license": "MIT",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@cloudflare/workers-types": "^4.20240903.0",
+    "@types/bun": "latest",
+    "miniflare": "^3.20240903.0"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
