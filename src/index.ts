@@ -14,12 +14,20 @@
  */
 
 export { createRelic } from "./runtime.ts";
-export { encryptPayload, decryptPayload, decryptAndParse } from "./crypto.ts";
+export {
+  encryptPayload,
+  decryptPayload,
+  decryptAndParse,
+  encryptValue,
+  decryptValue,
+  encryptSecrets,
+  decryptSecrets,
+  isEncryptedValue,
+} from "./crypto.ts";
 export { RelicError, ErrorCodes } from "./errors.ts";
 export type {
   RelicOptions,
   RelicInstance,
   SecretsData,
-  ArtifactEnvelope,
 } from "./types.ts";
-export { Defaults, CURRENT_VERSION } from "./types.ts";
+export { Defaults, ENCRYPTED_VALUE_PREFIX } from "./types.ts";

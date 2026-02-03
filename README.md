@@ -35,19 +35,20 @@
 Managing secrets in JavaScript applications is painful. Environment variables scatter across `.env` files, CI configs, and deployment dashboards. Relic takes a different approach:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                 │
-│   secrets.json          MASTER KEY           config/relic.enc  │
-│   ┌───────────┐        ┌─────────┐          ┌──────────────┐   │
-│   │ API_KEY   │   +    │ ******* │    =     │ {"v":1,...   │   │
-│   │ DB_URL    │        │         │          │  encrypted}  │   │
-│   │ ...       │        └─────────┘          └──────────────┘   │
-│   └───────────┘         (env var)            (commit this!)    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                                                                      │
+│   secrets.json          MASTER KEY             config/relic.enc     │
+│   ┌───────────┐        ┌─────────┐          ┌────────────────────┐  │
+│   │ API_KEY   │   +    │ ******* │    =     │ {                  │  │
+│   │ DB_URL    │        │         │          │   "API_KEY": "...", │  │
+│   │ ...       │        └─────────┘          │   "DB_URL": "..."   │  │
+│   └───────────┘         (env var)           │ }                   │  │
+│                                              └────────────────────┘  │
+│                                               (commit this!)         │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-**One encrypted file. One master key. Works everywhere.**
+**One encrypted file. One master key. Git-friendly diffs. Works everywhere.**
 
 ### Features
 
@@ -56,6 +57,7 @@ Managing secrets in JavaScript applications is painful. Environment variables sc
 | **🔐 Strong Encryption** | AES-256-GCM with PBKDF2 key derivation (150k iterations) |
 | **🌐 Edge Compatible** | Web Crypto API only — runs on Cloudflare Workers, Vercel Edge, Deno Deploy |
 | **📦 Single Artifact** | One JSON file containing all your secrets, safe to commit |
+| **📝 Git-Friendly** | Per-value encryption keeps keys visible — meaningful diffs and easy merges |
 | **🛠️ Familiar Workflow** | Edit secrets with `$EDITOR`, just like Rails credentials |
 | **✅ Tamper-Proof** | Authenticated encryption detects any modification |
 | **🪶 Zero Dependencies** | ~7KB runtime, no external packages |
@@ -477,22 +479,24 @@ try {
 
 ### Artifact Format
 
+Relic uses **per-value encryption** — your JSON structure remains visible, only values are encrypted:
+
 ```json
 {
-  "v": 1,
-  "kdf": {
-    "name": "pbkdf2",
-    "salt": "base64...",
-    "iterations": 150000,
-    "hash": "sha-256"
-  },
-  "cipher": {
-    "name": "aes-256-gcm",
-    "iv": "base64..."
-  },
-  "ciphertext": "base64..."
+  "API_KEY": "relic:v1:base64(iterations + salt + iv + ciphertext)...",
+  "DATABASE_URL": "relic:v1:base64(iterations + salt + iv + ciphertext)...",
+  "nested": {
+    "SECRET": "relic:v1:base64(iterations + salt + iv + ciphertext)..."
+  }
 }
 ```
+
+This format has several advantages:
+
+- **Meaningful git diffs** — see which keys changed, not just "binary file modified"
+- **Easy merge conflicts** — resolve conflicts by key, not by re-encrypting everything
+- **Visible structure** — know what secrets exist without decrypting
+- **Nested support** — organize secrets with nested objects
 
 ### Best Practices
 
@@ -553,6 +557,7 @@ Relic does NOT protect against:
 |---------|-------|--------|-------------------|------|
 | Encrypted at rest | ✅ | ❌ | ✅ | ✅ |
 | Edge runtime support | ✅ | ✅ | ❌ | ❌ |
+| Git-friendly diffs | ✅ | ✅ | ❌ | ✅ |
 | Single file | ✅ | ❌ | ✅ | ✅ |
 | No external dependencies | ✅ | ✅ | ❌ | ❌ |
 | Key management | Manual | N/A | Manual | KMS/PGP |

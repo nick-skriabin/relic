@@ -1,38 +1,11 @@
 /**
- * Supported artifact versions
+ * Encrypted value prefix
+ * Format: relic:v1:base64(salt + iv + ciphertext)
  */
-export const CURRENT_VERSION = 1;
+export const ENCRYPTED_VALUE_PREFIX = "relic:v1:";
 
 /**
- * KDF parameters stored in the artifact envelope
- */
-export interface KdfParams {
-  name: "pbkdf2";
-  salt: string; // base64 encoded
-  iterations: number;
-  hash: "sha-256";
-}
-
-/**
- * Cipher parameters stored in the artifact envelope
- */
-export interface CipherParams {
-  name: "aes-256-gcm";
-  iv: string; // base64 encoded
-}
-
-/**
- * Encrypted artifact envelope structure
- */
-export interface ArtifactEnvelope {
-  v: number;
-  kdf: KdfParams;
-  cipher: CipherParams;
-  ciphertext: string; // base64 encoded (includes GCM auth tag)
-}
-
-/**
- * Secrets data type - flat key/value mapping
+ * Secrets data type - flat or nested key/value mapping
  */
 export type SecretsData = Record<string, unknown>;
 

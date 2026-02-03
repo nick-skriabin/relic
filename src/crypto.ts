@@ -1,20 +1,20 @@
 /**
  * Crypto utilities using Web Crypto API (Edge compatible)
+ *
+ * Encrypts individual values with format: relic:v1:base64(salt + iv + ciphertext)
+ * This allows the JSON structure to remain visible for easier git diffs and merges.
  */
 
 import { encodeBase64, decodeBase64 } from "./base64.ts";
 import {
   decryptFailedError,
-  invalidArtifactFormatError,
   invalidJsonError,
-  unsupportedVersionError,
 } from "./errors.ts";
 import {
-  type ArtifactEnvelope,
-  CURRENT_VERSION,
   Defaults,
   type EncryptOptions,
   type SecretsData,
+  ENCRYPTED_VALUE_PREFIX,
 } from "./types.ts";
 
 /**
@@ -74,15 +74,27 @@ async function deriveKey(
 }
 
 /**
- * Encrypt a plaintext string with the master key
+ * Check if a string is an encrypted value
  */
-export async function encryptPayload(
+export function isEncryptedValue(value: unknown): boolean {
+  return typeof value === "string" && value.startsWith(ENCRYPTED_VALUE_PREFIX);
+}
+
+/**
+ * Encrypt a single value
+ * Returns format: relic:v1:base64(iterations[4] + salt[16] + iv[12] + ciphertext)
+ * Iterations are stored as 4-byte big-endian uint32
+ */
+export async function encryptValue(
   masterKey: string,
-  plaintext: string,
+  value: unknown,
   options?: EncryptOptions
 ): Promise<string> {
   const crypto = getCrypto();
   const iterations = options?.iterations ?? Defaults.KDF_ITERATIONS;
+
+  // Serialize value to JSON to preserve type
+  const plaintext = JSON.stringify(value);
 
   // Generate salt and IV
   const salt = randomBytes(Defaults.SALT_BYTES);
@@ -104,73 +116,52 @@ export async function encryptPayload(
     plaintextBytes
   );
 
-  // Build envelope
-  const envelope: ArtifactEnvelope = {
-    v: CURRENT_VERSION,
-    kdf: {
-      name: "pbkdf2",
-      salt: encodeBase64(salt),
-      iterations,
-      hash: "sha-256",
-    },
-    cipher: {
-      name: "aes-256-gcm",
-      iv: encodeBase64(iv),
-    },
-    ciphertext: encodeBase64(new Uint8Array(ciphertextBuffer)),
-  };
+  // Store iterations as 4-byte big-endian
+  const iterBytes = new Uint8Array(4);
+  new DataView(iterBytes.buffer).setUint32(0, iterations, false);
 
-  return JSON.stringify(envelope);
+  // Concatenate iterations + salt + iv + ciphertext
+  const ciphertext = new Uint8Array(ciphertextBuffer);
+  const combined = new Uint8Array(4 + salt.length + iv.length + ciphertext.length);
+  combined.set(iterBytes, 0);
+  combined.set(salt, 4);
+  combined.set(iv, 4 + salt.length);
+  combined.set(ciphertext, 4 + salt.length + iv.length);
+
+  return ENCRYPTED_VALUE_PREFIX + encodeBase64(combined);
 }
 
 /**
- * Decrypt an artifact string with the master key
+ * Decrypt a single encrypted value
  */
-export async function decryptPayload(
+export async function decryptValue(
   masterKey: string,
-  artifactString: string
-): Promise<string> {
+  encryptedString: string
+): Promise<unknown> {
+  if (!isEncryptedValue(encryptedString)) {
+    throw new Error("Not an encrypted value");
+  }
+
   const crypto = getCrypto();
 
-  // Parse envelope
-  let envelope: ArtifactEnvelope;
-  try {
-    envelope = JSON.parse(artifactString) as ArtifactEnvelope;
-  } catch {
-    throw invalidArtifactFormatError();
-  }
+  // Remove prefix and decode
+  const encoded = encryptedString.slice(ENCRYPTED_VALUE_PREFIX.length);
+  const combined = decodeBase64(encoded);
 
-  // Validate structure
-  if (
-    typeof envelope !== "object" ||
-    envelope === null ||
-    typeof envelope.v !== "number" ||
-    !envelope.kdf ||
-    !envelope.cipher ||
-    typeof envelope.ciphertext !== "string"
-  ) {
-    throw invalidArtifactFormatError();
-  }
-
-  // Check version
-  if (envelope.v !== CURRENT_VERSION) {
-    throw unsupportedVersionError(envelope.v);
-  }
-
-  // Decode parameters
-  const salt = decodeBase64(envelope.kdf.salt);
-  const iv = decodeBase64(envelope.cipher.iv);
-  const ciphertext = decodeBase64(envelope.ciphertext);
+  // Extract iterations (4 bytes), salt, iv, ciphertext
+  const iterations = new DataView(combined.buffer, combined.byteOffset, 4).getUint32(0, false);
+  const salt = combined.slice(4, 4 + Defaults.SALT_BYTES);
+  const iv = combined.slice(4 + Defaults.SALT_BYTES, 4 + Defaults.SALT_BYTES + Defaults.IV_BYTES);
+  const ciphertext = combined.slice(4 + Defaults.SALT_BYTES + Defaults.IV_BYTES);
 
   // Derive key
-  const key = await deriveKey(masterKey, salt, envelope.kdf.iterations);
+  const key = await deriveKey(masterKey, salt, iterations);
 
   // Decrypt
   try {
     const plaintextBuffer = await crypto.subtle.decrypt(
       {
         name: "AES-GCM",
-        // @ts-expect-error - Uint8Array is valid for iv in Web Crypto
         iv,
       },
       key,
@@ -178,10 +169,94 @@ export async function decryptPayload(
     );
 
     const decoder = new TextDecoder();
-    return decoder.decode(plaintextBuffer);
+    const plaintext = decoder.decode(plaintextBuffer);
+    return JSON.parse(plaintext);
   } catch {
     throw decryptFailedError();
   }
+}
+
+/**
+ * Recursively encrypt all values in an object
+ */
+export async function encryptSecrets(
+  masterKey: string,
+  data: SecretsData,
+  options?: EncryptOptions
+): Promise<SecretsData> {
+  const result: SecretsData = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      // Recursively encrypt nested objects
+      result[key] = await encryptSecrets(masterKey, value as SecretsData, options);
+    } else {
+      // Encrypt leaf values (including arrays, strings, numbers, booleans, null)
+      result[key] = await encryptValue(masterKey, value, options);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Recursively decrypt all encrypted values in an object
+ */
+export async function decryptSecrets(
+  masterKey: string,
+  data: SecretsData
+): Promise<SecretsData> {
+  const result: SecretsData = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (isEncryptedValue(value)) {
+      // Decrypt encrypted values
+      result[key] = await decryptValue(masterKey, value as string);
+    } else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      // Recursively decrypt nested objects
+      result[key] = await decryptSecrets(masterKey, value as SecretsData);
+    } else {
+      // Keep non-encrypted values as-is (allows mixing encrypted and plain values)
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Encrypt secrets and serialize to JSON string (for saving artifact file)
+ */
+export async function encryptPayload(
+  masterKey: string,
+  plaintext: string,
+  options?: EncryptOptions
+): Promise<string> {
+  const data = JSON.parse(plaintext) as SecretsData;
+  const encrypted = await encryptSecrets(masterKey, data, options);
+  return JSON.stringify(encrypted, null, 2) + "\n";
+}
+
+/**
+ * Parse artifact and decrypt all values (for loading artifact file)
+ */
+export async function decryptPayload(
+  masterKey: string,
+  artifactString: string
+): Promise<string> {
+  let data: SecretsData;
+  try {
+    data = JSON.parse(artifactString) as SecretsData;
+  } catch {
+    throw invalidJsonError();
+  }
+
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    throw invalidJsonError();
+  }
+
+  const decrypted = await decryptSecrets(masterKey, data);
+  return JSON.stringify(decrypted, null, 2) + "\n";
 }
 
 /**
@@ -191,18 +266,16 @@ export async function decryptAndParse(
   masterKey: string,
   artifactString: string
 ): Promise<SecretsData> {
-  const plaintext = await decryptPayload(masterKey, artifactString);
-
+  let data: SecretsData;
   try {
-    const data = JSON.parse(plaintext);
-    if (typeof data !== "object" || data === null || Array.isArray(data)) {
-      throw invalidJsonError();
-    }
-    return data as SecretsData;
-  } catch (e) {
-    if (e instanceof SyntaxError) {
-      throw invalidJsonError();
-    }
-    throw e;
+    data = JSON.parse(artifactString) as SecretsData;
+  } catch {
+    throw invalidJsonError();
   }
+
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    throw invalidJsonError();
+  }
+
+  return decryptSecrets(masterKey, data);
 }
