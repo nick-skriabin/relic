@@ -398,71 +398,106 @@ const data = JSON.parse(plaintext);
 
 Relic is designed from the ground up to work in Edge environments where Node.js APIs aren't available.
 
+Since Edge runtimes don't have filesystem access, you need to bundle the artifact at build time. This keeps your secrets in the committed file (not in env vars) while still working in Edge.
+
+### Next.js (Edge Runtime & Middleware)
+
+1. Configure webpack in `next.config.js`:
+   ```js
+   /** @type {import('next').NextConfig} */
+   const nextConfig = {
+     webpack: (config) => {
+       config.module.rules.push({
+         test: /\.enc$/,
+         type: "asset/source",
+       });
+       return config;
+     },
+   };
+
+   module.exports = nextConfig;
+   ```
+
+2. Create a shared relic instance:
+   ```typescript
+   // lib/relic.ts
+   import { createRelic } from "@nick-skriabin/relic";
+   import artifact from "../config/relic.enc";
+
+   export const relic = createRelic({ artifact });
+   ```
+
+3. Use in Edge API routes:
+   ```typescript
+   // app/api/route.ts
+   import { relic } from "@/lib/relic";
+
+   export const runtime = "edge";
+
+   export async function GET() {
+     const secrets = await relic.load();
+     return Response.json({ ok: true });
+   }
+   ```
+
+4. Use in Middleware:
+   ```typescript
+   // middleware.ts
+   import { relic } from "@/lib/relic";
+
+   export async function middleware(request: Request) {
+     const { API_KEY } = await relic.load();
+     // Validate requests, add headers, etc.
+   }
+
+   export const config = {
+     matcher: "/api/:path*",
+   };
+   ```
+
 ### Cloudflare Workers
 
 ```typescript
 // src/worker.ts
 import { createRelic } from "@nick-skriabin/relic";
 
+// Bundled at build time (esbuild/wrangler handles this)
+import artifact from "../config/relic.enc";
+
+const relic = createRelic({
+  artifact,
+  masterKey: RELIC_MASTER_KEY, // from wrangler secret
+});
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const relic = createRelic({
-      artifact: env.RELIC_ARTIFACT,
-      masterKey: env.RELIC_MASTER_KEY,
-    });
-
     const { API_KEY } = await relic.load();
-
-    // Use your secrets...
     return new Response("OK");
   },
 };
 ```
 
+Configure wrangler to handle `.enc` files:
 ```toml
 # wrangler.toml
-[vars]
-RELIC_ARTIFACT = "..." # Or use wrangler secret put
+[rules]
+{ type = "Text", globs = ["**/*.enc"] }
 ```
 
-### Vercel Edge Functions
-
-```typescript
-// app/api/route.ts
-import { createRelic } from "@nick-skriabin/relic";
-
-export const runtime = "edge";
-
-export async function GET() {
-  const relic = createRelic({
-    artifact: process.env.RELIC_ARTIFACT,
-    masterKey: process.env.RELIC_MASTER_KEY,
-  });
-
-  const secrets = await relic.load();
-  // ...
-}
+Set the master key as a secret:
+```bash
+wrangler secret put RELIC_MASTER_KEY
 ```
 
-### Next.js Middleware
+### Vite / Nuxt / SvelteKit
+
+Vite supports raw imports natively:
 
 ```typescript
-// middleware.ts
 import { createRelic } from "@nick-skriabin/relic";
+import artifact from "./config/relic.enc?raw";
 
-export async function middleware(request: Request) {
-  const relic = createRelic({
-    artifact: process.env.RELIC_ARTIFACT,
-    masterKey: process.env.RELIC_MASTER_KEY,
-  });
-
-  const { API_KEY } = await relic.load();
-  // Validate requests, add headers, etc.
-}
-
-export const config = {
-  matcher: "/api/:path*",
-};
+export const relic = createRelic({ artifact });
 ```
 
 ### Deno / Deno Deploy
@@ -470,35 +505,14 @@ export const config = {
 ```typescript
 import { createRelic } from "npm:@nick-skriabin/relic";
 
-const relic = createRelic({
-  artifact: Deno.env.get("RELIC_ARTIFACT"),
-  masterKey: Deno.env.get("RELIC_MASTER_KEY"),
-});
+// Deno supports reading files at module load time
+const artifact = await Deno.readTextFile("./config/relic.enc");
+
+const relic = createRelic({ artifact });
 
 Deno.serve(async () => {
   const secrets = await relic.load();
   return new Response("OK");
-});
-```
-
-### Bundling the Artifact
-
-For frameworks that support raw imports, you can bundle the artifact:
-
-```typescript
-// Vite
-import artifact from "./config/relic.enc?raw";
-
-// Webpack (with raw-loader)
-import artifact from "!!raw-loader!./config/relic.enc";
-
-// Build-time loading
-import { readFileSync } from "fs";
-const artifact = readFileSync("./config/relic.enc", "utf-8");
-
-const relic = createRelic({
-  artifact,
-  masterKey: process.env.RELIC_MASTER_KEY,
 });
 ```
 
