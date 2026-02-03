@@ -221,6 +221,53 @@ describe("runtime", () => {
       expect(result1).toEqual(result2);
       expect(result1).not.toBe(result2);
     });
+
+    test("singleton: multiple createRelic() calls share the same cache", async () => {
+      const masterKey = "singleton-key";
+      const secrets = { SINGLETON: "shared-value" };
+      const artifact = await encryptPayload(
+        masterKey,
+        JSON.stringify(secrets),
+        { iterations: TEST_ITERATIONS }
+      );
+
+      // Create two separate relic instances with the same artifact/key
+      const relic1 = createRelic({ artifact, masterKey });
+      const relic2 = createRelic({ artifact, masterKey });
+
+      // Load from first instance
+      const result1 = await relic1.load();
+
+      // Load from second instance - should return cached result
+      const result2 = await relic2.load();
+
+      // Should be the exact same object (singleton behavior)
+      expect(result1).toBe(result2);
+    });
+
+    test("singleton: different keys do not share cache", async () => {
+      const secrets = { KEY_SPECIFIC: "value" };
+      const artifact1 = await encryptPayload(
+        "key-one",
+        JSON.stringify(secrets),
+        { iterations: TEST_ITERATIONS }
+      );
+      const artifact2 = await encryptPayload(
+        "key-two",
+        JSON.stringify(secrets),
+        { iterations: TEST_ITERATIONS }
+      );
+
+      const relic1 = createRelic({ artifact: artifact1, masterKey: "key-one" });
+      const relic2 = createRelic({ artifact: artifact2, masterKey: "key-two" });
+
+      const result1 = await relic1.load();
+      const result2 = await relic2.load();
+
+      // Should be equal but different objects (different cache entries)
+      expect(result1).toEqual(result2);
+      expect(result1).not.toBe(result2);
+    });
   });
 
   describe("error handling", () => {

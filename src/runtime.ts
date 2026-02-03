@@ -17,6 +17,13 @@ import {
 } from "./types.ts";
 
 /**
+ * Global cache for decrypted secrets, keyed by artifact content.
+ * This ensures decryption only happens once per unique artifact,
+ * even across multiple createRelic() calls.
+ */
+const globalCache = new Map<string, SecretsData>();
+
+/**
  * Create a Relic instance for accessing encrypted secrets
  *
  * @example
@@ -34,8 +41,6 @@ export function createRelic(options?: RelicOptions): RelicInstance {
   const artifactEnv = options?.artifactEnv ?? Defaults.ARTIFACT_ENV;
   const masterKeyEnv = options?.masterKeyEnv ?? Defaults.MASTER_KEY_ENV;
   const shouldCache = options?.cache ?? true;
-
-  let cachedSecrets: SecretsData | null = null;
 
   /**
    * Resolve the artifact string
@@ -69,16 +74,22 @@ export function createRelic(options?: RelicOptions): RelicInstance {
    * Load and decrypt secrets
    */
   async function load(): Promise<SecretsData> {
-    if (shouldCache && cachedSecrets !== null) {
-      return cachedSecrets;
-    }
-
     const artifact = getArtifact();
     const masterKey = getMasterKey();
+
+    // Cache key includes both artifact and master key
+    // This ensures different keys don't return cached results from other keys
+    const cacheKey = `${masterKey}:${artifact}`;
+
+    // Check global cache first (singleton behavior)
+    if (shouldCache && globalCache.has(cacheKey)) {
+      return globalCache.get(cacheKey)!;
+    }
+
     const secrets = await decryptAndParse(masterKey, artifact);
 
     if (shouldCache) {
-      cachedSecrets = secrets;
+      globalCache.set(cacheKey, secrets);
     }
 
     return secrets;
