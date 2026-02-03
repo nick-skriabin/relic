@@ -25,6 +25,11 @@ export interface RelicOptions {
   masterKey?: string;
   /** Whether to cache decrypted secrets. Default: true */
   cache?: boolean;
+  /**
+   * Path to local override file (plain JSON). Values override encrypted secrets.
+   * Set to false to disable. Default: "config/relic.local.json"
+   */
+  localOverrides?: string | false;
 }
 
 /**
@@ -57,6 +62,7 @@ export const Defaults = {
   MASTER_KEY_ENV: "RELIC_MASTER_KEY",
   ARTIFACT_FILE: "config/relic.enc",
   KEY_FILE: "config/relic.key",
+  LOCAL_OVERRIDES_FILE: "config/relic.local.json",
   KDF_ITERATIONS: 600_000,
   SALT_BYTES: 16,
   IV_BYTES: 12,

@@ -244,12 +244,19 @@ async function initCommand(keyFile: string, artifactFile: string, iterations?: n
   writeFileSync(artifactFilePath, artifact, "utf-8");
   console.log(`✓ Created encrypted secrets: ${artifactFile}`);
 
-  // Add key file to .gitignore
-  const added = addToGitignore(keyFile);
-  if (added) {
+  // Add key file and local overrides to .gitignore
+  const keyAdded = addToGitignore(keyFile);
+  if (keyAdded) {
     console.log(`✓ Added ${keyFile} to .gitignore`);
   } else {
     console.log(`✓ ${keyFile} already in .gitignore`);
+  }
+
+  const localAdded = addToGitignore(Defaults.LOCAL_OVERRIDES_FILE);
+  if (localAdded) {
+    console.log(`✓ Added ${Defaults.LOCAL_OVERRIDES_FILE} to .gitignore`);
+  } else {
+    console.log(`✓ ${Defaults.LOCAL_OVERRIDES_FILE} already in .gitignore`);
   }
 
   console.log(`

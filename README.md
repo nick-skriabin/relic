@@ -78,7 +78,7 @@ bun add @nick-skriabin/relic
 npx relic init
 ```
 
-This generates a master key and saves it to `config/relic.key` (automatically added to `.gitignore`).
+This generates a master key and saves it to `config/relic.key` (automatically added to `.gitignore`, along with `config/relic.local.json`).
 
 ### 2. Create Your Secrets
 
@@ -270,7 +270,7 @@ relic init
 This:
 1. Generates a secure random master key
 2. Saves it to `config/relic.key`
-3. Adds `config/relic.key` to `.gitignore`
+3. Adds `config/relic.key` and `config/relic.local.json` to `.gitignore`
 
 Now you can use `relic edit` without setting environment variables.
 
@@ -309,8 +309,9 @@ export EDITOR="nano"                 # Use Nano
 ```
 your-project/
 ├── config/
-│   ├── relic.key    ← Master key (git-ignored)
-│   └── relic.enc    ← Encrypted secrets (commit this)
+│   ├── relic.key         ← Master key (git-ignored)
+│   ├── relic.enc         ← Encrypted secrets (commit this)
+│   └── relic.local.json  ← Local overrides (git-ignored, optional)
 ├── src/
 └── package.json
 ```
@@ -320,6 +321,46 @@ Override with `--file` and `--key-file`:
 ```bash
 relic init --key-file ./secrets/master.key
 relic edit --file ./secrets/production.enc --key-file ./secrets/master.key
+```
+
+### Local Overrides
+
+For local development, you can override encrypted secrets with a plain JSON file. This is useful when you need different values locally without modifying the shared encrypted artifact.
+
+Create `config/relic.local.json` (add to `.gitignore`):
+
+```json
+{
+  "DATABASE_URL": "postgres://localhost:5432/myapp_dev",
+  "DEBUG": true
+}
+```
+
+Values in `relic.local.json` are merged on top of encrypted secrets:
+
+```typescript
+// config/relic.enc contains: { "DATABASE_URL": "prod-url", "API_KEY": "secret" }
+// config/relic.local.json contains: { "DATABASE_URL": "localhost", "DEBUG": true }
+
+const secrets = await relic.load();
+// Result: { "DATABASE_URL": "localhost", "API_KEY": "secret", "DEBUG": true }
+```
+
+**Resolution order:**
+1. Load and decrypt `config/relic.enc`
+2. Deep merge `config/relic.local.json` on top (if present)
+3. Local values override encrypted values
+
+To disable local overrides:
+
+```typescript
+const relic = createRelic({ localOverrides: false });
+```
+
+To use a custom path:
+
+```typescript
+const relic = createRelic({ localOverrides: "./secrets/local.json" });
 ```
 
 ---
@@ -351,6 +392,10 @@ const relic = createRelic({
 
   // Cache decrypted secrets (default: true)
   cache: true,
+
+  // Local overrides file path, or false to disable
+  // (default: "config/relic.local.json")
+  localOverrides: "./config/relic.local.json",
 });
 ```
 

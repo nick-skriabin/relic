@@ -174,6 +174,10 @@ export function createRelic(options?: RelicOptions): RelicInstance {
   const artifactEnv = options?.artifactEnv ?? Defaults.ARTIFACT_ENV;
   const masterKeyEnv = options?.masterKeyEnv ?? Defaults.MASTER_KEY_ENV;
   const shouldCache = options?.cache ?? true;
+  const localOverridesPath =
+    options?.localOverrides === false
+      ? null
+      : options?.localOverrides ?? Defaults.LOCAL_OVERRIDES_FILE;
 
   /**
    * Resolve the artifact string
@@ -229,22 +233,75 @@ export function createRelic(options?: RelicOptions): RelicInstance {
   }
 
   /**
+   * Load local overrides file (plain JSON)
+   */
+  async function getLocalOverrides(): Promise<SecretsData | null> {
+    if (!localOverridesPath) {
+      return null;
+    }
+
+    const content = await tryReadArtifactFile(localOverridesPath);
+    if (!content) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(content) as SecretsData;
+    } catch {
+      // Invalid JSON in local overrides - ignore silently
+      return null;
+    }
+  }
+
+  /**
+   * Deep merge two objects (source overrides target)
+   */
+  function deepMerge(target: SecretsData, source: SecretsData): SecretsData {
+    const result = { ...target };
+    for (const key of Object.keys(source)) {
+      const sourceVal = source[key];
+      const targetVal = result[key];
+      if (
+        sourceVal &&
+        typeof sourceVal === "object" &&
+        !Array.isArray(sourceVal) &&
+        targetVal &&
+        typeof targetVal === "object" &&
+        !Array.isArray(targetVal)
+      ) {
+        result[key] = deepMerge(
+          targetVal as SecretsData,
+          sourceVal as SecretsData
+        );
+      } else {
+        result[key] = sourceVal;
+      }
+    }
+    return result;
+  }
+
+  /**
    * Load and decrypt secrets
    */
   async function load(): Promise<SecretsData> {
     const artifact = await getArtifact();
     const masterKey = await getMasterKey();
+    const localOverrides = await getLocalOverrides();
 
-    // Cache key includes both artifact and master key
-    // This ensures different keys don't return cached results from other keys
-    const cacheKey = `${masterKey}:${artifact}`;
+    // Cache key includes artifact, master key, and local overrides
+    const cacheKey = `${masterKey}:${artifact}:${JSON.stringify(localOverrides)}`;
 
     // Check global cache first (singleton behavior)
     if (shouldCache && globalCache.has(cacheKey)) {
       return globalCache.get(cacheKey)!;
     }
 
-    const secrets = await decryptAndParse(masterKey, artifact);
+    let secrets = await decryptAndParse(masterKey, artifact);
+
+    // Apply local overrides if present
+    if (localOverrides) {
+      secrets = deepMerge(secrets, localOverrides);
+    }
 
     if (shouldCache) {
       globalCache.set(cacheKey, secrets);
