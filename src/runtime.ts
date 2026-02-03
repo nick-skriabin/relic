@@ -207,15 +207,25 @@ export function createRelic(options?: RelicOptions): RelicInstance {
   /**
    * Resolve the master key
    */
-  function getMasterKey(): string {
+  async function getMasterKey(): Promise<string> {
+    // 1. Explicit master key option
     if (options?.masterKey) {
       return options.masterKey;
     }
-    const envValue = getEnv(masterKeyEnv);
-    if (!envValue) {
-      throw missingMasterKeyError();
+
+    // 2. Default key file (config/relic.key)
+    const keyFromFile = await tryReadArtifactFile(Defaults.KEY_FILE);
+    if (keyFromFile) {
+      return keyFromFile.trim();
     }
-    return envValue;
+
+    // 3. Environment variable
+    const envValue = getEnv(masterKeyEnv);
+    if (envValue) {
+      return envValue;
+    }
+
+    throw missingMasterKeyError();
   }
 
   /**
@@ -223,7 +233,7 @@ export function createRelic(options?: RelicOptions): RelicInstance {
    */
   async function load(): Promise<SecretsData> {
     const artifact = await getArtifact();
-    const masterKey = getMasterKey();
+    const masterKey = await getMasterKey();
 
     // Cache key includes both artifact and master key
     // This ensures different keys don't return cached results from other keys
