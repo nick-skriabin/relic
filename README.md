@@ -54,7 +54,7 @@ Managing secrets in JavaScript applications is painful. Environment variables sc
 
 | Feature | Description |
 |---------|-------------|
-| **🔐 Strong Encryption** | AES-256-GCM with PBKDF2 key derivation (150k iterations) |
+| **🔐 Strong Encryption** | AES-256-GCM with PBKDF2 key derivation (600k iterations) |
 | **🌐 Edge Compatible** | Web Crypto API only — runs on Cloudflare Workers, Vercel Edge, Deno Deploy |
 | **📦 Single Artifact** | One JSON file containing all your secrets, safe to commit |
 | **📝 Git-Friendly** | Per-value encryption keeps keys visible — meaningful diffs and easy merges |
@@ -472,7 +472,7 @@ try {
 | Component | Specification |
 |-----------|---------------|
 | **Cipher** | AES-256-GCM |
-| **Key Derivation** | PBKDF2-SHA256, 150,000 iterations |
+| **Key Derivation** | PBKDF2-SHA256, 600,000 iterations |
 | **Salt** | 16 bytes, randomly generated |
 | **IV/Nonce** | 12 bytes, randomly generated |
 | **Auth Tag** | 128 bits (included in ciphertext) |

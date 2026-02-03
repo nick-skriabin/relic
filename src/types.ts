@@ -55,7 +55,7 @@ export const Defaults = {
   MASTER_KEY_ENV: "RELIC_MASTER_KEY",
   ARTIFACT_FILE: "config/relic.enc",
   KEY_FILE: "config/relic.key",
-  KDF_ITERATIONS: 150_000,
+  KDF_ITERATIONS: 600_000,
   SALT_BYTES: 16,
   IV_BYTES: 12,
 } as const;
