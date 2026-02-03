@@ -10,11 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#cli">CLI</a> •
   <a href="#api">API</a> •
-  <a href="#edge-runtimes">Edge Runtimes</a> •
+  <a href="#edge-runtimes">Edge</a> •
   <a href="#security">Security</a>
 </p>
 
@@ -27,6 +26,41 @@
   <img src="https://img.shields.io/badge/TypeScript-First-3178c6?logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
 </p>
+
+---
+
+## Table of Contents
+
+- [Why Relic?](#why-relic)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [CLI](#cli)
+  - [Commands](#commands)
+  - [Local Development Setup](#local-development-setup)
+  - [Key Resolution Order](#key-resolution-order)
+  - [Editor Configuration](#editor-configuration)
+  - [Default File Locations](#default-file-locations)
+  - [Local Overrides](#local-overrides)
+  - [Public Secrets (Frontend-Safe)](#public-secrets-frontend-safe)
+- [API](#api)
+  - [`createRelic(options?)`](#createrelicopts)
+  - [Instance Methods](#instance-methods)
+  - [Low-Level Functions](#low-level-functions)
+- [Edge Runtimes](#edge-runtimes)
+  - [Next.js](#nextjs-edge-runtime--middleware)
+  - [Cloudflare Workers](#cloudflare-workers)
+  - [Vite / Nuxt / SvelteKit](#vite--nuxt--sveltekit)
+  - [Deno](#deno--deno-deploy)
+- [Error Handling](#error-handling)
+- [Security](#security)
+  - [Cryptographic Details](#cryptographic-details)
+  - [Artifact Format](#artifact-format)
+  - [Best Practices](#best-practices)
+  - [Key Rotation](#key-rotation)
+  - [Threat Model](#threat-model)
+- [Comparison](#comparison)
+- [Troubleshooting](#troubleshooting)
+- [TypeScript](#typescript)
 
 ---
 
