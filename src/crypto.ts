@@ -38,13 +38,26 @@ function randomBytes(length: number): Uint8Array {
 }
 
 /**
- * Derive an AES key from a master key using PBKDF2
+ * Cache for derived keys to avoid expensive PBKDF2 re-computation
+ * Key format: masterKey:base64(salt):iterations
+ */
+const keyCache = new Map<string, CryptoKey>();
+
+/**
+ * Derive an AES key from a master key using PBKDF2 (cached)
  */
 async function deriveKey(
   masterKey: string,
   salt: Uint8Array,
   iterations: number
 ): Promise<CryptoKey> {
+  // Check cache first
+  const cacheKey = `${masterKey}:${encodeBase64(salt)}:${iterations}`;
+  const cached = keyCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const crypto = getCrypto();
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
@@ -55,7 +68,7 @@ async function deriveKey(
     ["deriveKey"]
   );
 
-  return crypto.subtle.deriveKey(
+  const key = await crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
       // @ts-expect-error - Uint8Array is valid for salt in Web Crypto
@@ -71,6 +84,10 @@ async function deriveKey(
     false,
     ["encrypt", "decrypt"]
   );
+
+  // Cache for future use
+  keyCache.set(cacheKey, key);
+  return key;
 }
 
 /**
@@ -177,51 +194,57 @@ export async function decryptValue(
 }
 
 /**
- * Recursively encrypt all values in an object
+ * Recursively encrypt all values in an object (parallelized)
  */
 export async function encryptSecrets(
   masterKey: string,
   data: SecretsData,
   options?: EncryptOptions
 ): Promise<SecretsData> {
-  const result: SecretsData = {};
+  const entries = Object.entries(data);
 
-  for (const [key, value] of Object.entries(data)) {
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      // Recursively encrypt nested objects
-      result[key] = await encryptSecrets(masterKey, value as SecretsData, options);
-    } else {
-      // Encrypt leaf values (including arrays, strings, numbers, booleans, null)
-      result[key] = await encryptValue(masterKey, value, options);
-    }
-  }
+  // Process all entries in parallel
+  const encryptedEntries = await Promise.all(
+    entries.map(async ([key, value]): Promise<[string, unknown]> => {
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        // Recursively encrypt nested objects
+        return [key, await encryptSecrets(masterKey, value as SecretsData, options)];
+      } else {
+        // Encrypt leaf values (including arrays, strings, numbers, booleans, null)
+        return [key, await encryptValue(masterKey, value, options)];
+      }
+    })
+  );
 
-  return result;
+  return Object.fromEntries(encryptedEntries);
 }
 
 /**
- * Recursively decrypt all encrypted values in an object
+ * Recursively decrypt all encrypted values in an object (parallelized)
  */
 export async function decryptSecrets(
   masterKey: string,
   data: SecretsData
 ): Promise<SecretsData> {
-  const result: SecretsData = {};
+  const entries = Object.entries(data);
 
-  for (const [key, value] of Object.entries(data)) {
-    if (isEncryptedValue(value)) {
-      // Decrypt encrypted values
-      result[key] = await decryptValue(masterKey, value as string);
-    } else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      // Recursively decrypt nested objects
-      result[key] = await decryptSecrets(masterKey, value as SecretsData);
-    } else {
-      // Keep non-encrypted values as-is (allows mixing encrypted and plain values)
-      result[key] = value;
-    }
-  }
+  // Process all entries in parallel
+  const decryptedEntries = await Promise.all(
+    entries.map(async ([key, value]): Promise<[string, unknown]> => {
+      if (isEncryptedValue(value)) {
+        // Decrypt encrypted values
+        return [key, await decryptValue(masterKey, value as string)];
+      } else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        // Recursively decrypt nested objects
+        return [key, await decryptSecrets(masterKey, value as SecretsData)];
+      } else {
+        // Keep non-encrypted values as-is
+        return [key, value];
+      }
+    })
+  );
 
-  return result;
+  return Object.fromEntries(decryptedEntries);
 }
 
 /**
