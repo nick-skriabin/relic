@@ -36,8 +36,16 @@
     "cloudflare-workers",
     "config"
   ],
-  "author": "",
+  "author": "Nick Skriabin",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nick-skriabin/relic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nick-skriabin/relic/issues"
+  },
+  "homepage": "https://github.com/nick-skriabin/relic#readme",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240903.0",
     "@types/bun": "latest",

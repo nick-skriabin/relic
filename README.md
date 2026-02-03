@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nicholasrq/relic/actions/workflows/ci.yml"><img src="https://github.com/nicholasrq/relic/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/nick-skriabin/relic/actions/workflows/ci.yml"><img src="https://github.com/nick-skriabin/relic/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@nick-skriabin/relic"><img src="https://img.shields.io/npm/v/@nick-skriabin/relic?color=cb3837&logo=npm" alt="npm"></a>
   <img src="https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white" alt="Node.js 18+">
   <img src="https://img.shields.io/badge/Bun-1.0+-f9f1e1?logo=bun&logoColor=black" alt="Bun">
