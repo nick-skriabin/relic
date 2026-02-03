@@ -130,6 +130,31 @@ async function readArtifactFile(filePath: string): Promise<string> {
 }
 
 /**
+ * Try to read artifact file, return null if not found or in Edge runtime
+ */
+async function tryReadArtifactFile(filePath: string): Promise<string | null> {
+  // Check file cache first
+  if (fileCache.has(filePath)) {
+    return fileCache.get(filePath)!;
+  }
+
+  const fs = await getFsModule();
+  if (!fs) {
+    // Edge runtime - can't read files
+    return null;
+  }
+
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    fileCache.set(filePath, content);
+    return content;
+  } catch {
+    // File doesn't exist or can't be read
+    return null;
+  }
+}
+
+/**
  * Create a Relic instance for accessing encrypted secrets
  *
  * @example
@@ -159,17 +184,24 @@ export function createRelic(options?: RelicOptions): RelicInstance {
       return options.artifact;
     }
 
-    // 2. File path (Node.js only)
+    // 2. Explicit file path (Node.js only)
     if (options?.artifactPath) {
       return await readArtifactFile(options.artifactPath);
     }
 
-    // 3. Environment variable
-    const envValue = getEnv(artifactEnv);
-    if (!envValue) {
-      throw missingArtifactError();
+    // 3. Default file path (Node.js only) - try without erroring
+    const defaultArtifact = await tryReadArtifactFile(Defaults.ARTIFACT_FILE);
+    if (defaultArtifact) {
+      return defaultArtifact;
     }
-    return envValue;
+
+    // 4. Environment variable
+    const envValue = getEnv(artifactEnv);
+    if (envValue) {
+      return envValue;
+    }
+
+    throw missingArtifactError();
   }
 
   /**
