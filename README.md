@@ -61,6 +61,8 @@
 - [Comparison](#comparison)
 - [Troubleshooting](#troubleshooting)
 - [TypeScript](#typescript)
+  - [Auto-Generated Types](#auto-generated-types)
+  - [Manual Typing](#manual-typing)
 
 ---
 
@@ -345,6 +347,7 @@ your-project/
 ├── config/
 │   ├── relic.key         ← Master key (git-ignored)
 │   ├── relic.enc         ← Encrypted secrets (commit this)
+│   ├── relic.d.ts        ← Auto-generated types (commit this)
 │   └── relic.local.json  ← Local overrides (git-ignored, optional)
 ├── src/
 └── package.json
@@ -853,30 +856,83 @@ Relic is designed for server-side use only. Secrets should never be sent to the 
 
 ## TypeScript
 
-Relic is written in TypeScript and ships with full type definitions:
+### Auto-Generated Types
+
+Every time you run `relic edit`, Relic generates a `config/relic.d.ts` file with TypeScript interfaces matching your secrets structure:
+
+```
+config/
+├── relic.enc         ← Encrypted secrets
+├── relic.key         ← Master key (git-ignored)
+├── relic.local.json  ← Local overrides (git-ignored)
+└── relic.d.ts        ← Auto-generated types (commit this)
+```
+
+For this secrets file:
+
+```json
+{
+  "DATABASE_URL": "postgres://localhost/db",
+  "API_KEY": "sk_live_xxx",
+  "aws": {
+    "ACCESS_KEY": "AKIA...",
+    "REGION": "us-east-1"
+  },
+  "public": {
+    "API_URL": "https://api.example.com"
+  }
+}
+```
+
+Relic generates:
 
 ```typescript
-import {
-  createRelic,
-  RelicError,
-  ErrorCodes,
-  type RelicOptions,
-  type RelicInstance,
-  type SecretsData,
-} from "@nick-skriabin/relic";
-
-// Type your secrets
-interface MySecrets {
-  API_KEY: string;
+// config/relic.d.ts (auto-generated)
+export interface RelicSecrets {
   DATABASE_URL: string;
-  FEATURE_FLAGS: string;
+  API_KEY: string;
+  aws: {
+    ACCESS_KEY: string;
+    REGION: string;
+  };
+  public: {
+    API_URL: string;
+  };
 }
 
-const relic = createRelic();
-const secrets = await relic.load() as MySecrets;
+export interface RelicPublicSecrets {
+  API_URL: string;
+}
 
-// Now fully typed
-secrets.API_KEY;  // string
+// Module augmentation — makes load() and loadPublic() return typed results
+declare module "@nick-skriabin/relic" {
+  interface RelicInstance {
+    load(): Promise<RelicSecrets>;
+    loadPublic(): Promise<RelicPublicSecrets>;
+  }
+}
+```
+
+Add a reference to the generated file (e.g. in your entry point or a global `.d.ts`):
+
+```typescript
+/// <reference path="./config/relic.d.ts" />
+```
+
+Now `load()` and `loadPublic()` return typed results automatically — no casting needed:
+
+```typescript
+import { createRelic } from "@nick-skriabin/relic";
+
+const relic = createRelic();
+
+const secrets = await relic.load();
+secrets.DATABASE_URL;     // string
+secrets.aws.ACCESS_KEY;   // string — deep nesting supported
+secrets.NONEXISTENT;      // TS error
+
+const pub = await relic.loadPublic();
+pub.API_URL;              // string
 ```
 
 ---

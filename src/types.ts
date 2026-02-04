@@ -65,6 +65,7 @@ export const Defaults = {
   ARTIFACT_FILE: "config/relic.enc",
   KEY_FILE: "config/relic.key",
   LOCAL_OVERRIDES_FILE: "config/relic.local.json",
+  TYPES_FILE: "config/relic.d.ts",
   KDF_ITERATIONS: 600_000,
   SALT_BYTES: 16,
   IV_BYTES: 12,
