@@ -47,7 +47,8 @@
   - [Instance Methods](#instance-methods)
   - [Low-Level Functions](#low-level-functions)
 - [Edge Runtimes](#edge-runtimes)
-  - [Next.js](#nextjs-edge-runtime--middleware)
+  - [Next.js (Node.js Runtime)](#nextjs-nodejs-runtime)
+  - [Next.js (Edge Runtime)](#nextjs-edge-runtime--middleware)
   - [Cloudflare Workers](#cloudflare-workers)
   - [Vite / Nuxt / SvelteKit](#vite--nuxt--sveltekit)
   - [Deno](#deno--deno-deploy)
@@ -541,22 +542,76 @@ Relic is designed from the ground up to work in Edge environments where Node.js 
 
 Since Edge runtimes don't have filesystem access, you need to bundle the artifact at build time. This keeps your secrets in the committed file (not in env vars) while still working in Edge.
 
+### Next.js (Node.js Runtime)
+
+No bundler configuration needed — Relic reads `config/relic.enc` automatically:
+
+```typescript
+// lib/relic.ts
+import { createRelic } from "@nick-skriabin/relic";
+
+export const relic = createRelic();
+```
+
+```typescript
+// app/api/route.ts
+import { relic } from "@/lib/relic";
+
+export async function GET() {
+  const secrets = await relic.load();
+  return Response.json({ ok: true });
+}
+```
+
 ### Next.js (Edge Runtime & Middleware)
 
-1. Configure webpack in `next.config.js`:
-   ```js
-   /** @type {import('next').NextConfig} */
-   const nextConfig = {
-     webpack: (config) => {
-       config.module.rules.push({
-         test: /\.enc$/,
-         type: "asset/source",
-       });
-       return config;
-     },
-   };
+Edge functions don't have filesystem access, so the artifact must be bundled.
 
-   module.exports = nextConfig;
+**Next.js 15+ (Turbopack):**
+
+```ts
+// next.config.ts
+const nextConfig: NextConfig = {
+  turbopack: {
+    rules: {
+      "*.enc": {
+        loaders: ["raw-loader"],
+        as: "*.js",
+      },
+    },
+  },
+};
+
+export default nextConfig;
+```
+
+**Next.js 14 and below (Webpack):**
+
+```js
+// next.config.js
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.enc$/,
+      type: "asset/source",
+    });
+    return config;
+  },
+};
+
+module.exports = nextConfig;
+```
+
+**Usage (same for both):**
+
+1. Add a type declaration (optional, for TypeScript):
+   ```typescript
+   // types/assets.d.ts
+   declare module "*.enc" {
+     const content: string;
+     export default content;
+   }
    ```
 
 2. Create a shared relic instance:
