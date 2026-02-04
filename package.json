@@ -10,6 +10,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./react": {
+      "import": "./dist/react/index.js",
+      "types": "./dist/react/index.d.ts"
     }
   },
   "bin": {
@@ -19,8 +23,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build:lib && bun build:cli",
+    "build": "bun build:lib && bun build:react && bun build:cli",
     "build:lib": "bun build ./src/index.ts --outdir ./dist --target=browser --format=esm && bun run build:types",
+    "build:react": "bun build ./src/react/index.ts --outdir ./dist/react --target=browser --format=esm --external react",
     "build:cli": "bun build ./src/cli/index.ts --outdir ./dist/cli --target=node --format=esm",
     "build:types": "tsc --project tsconfig.build.json",
     "test": "bun test",
@@ -49,10 +54,20 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240903.0",
     "@types/bun": "latest",
-    "miniflare": "^3.20240903.0"
+    "@types/react": "^19",
+    "@types/react-dom": "^19.2.3",
+    "miniflare": "^3.20240903.0",
+    "react": "^19",
+    "react-dom": "^19.2.4"
   },
   "peerDependencies": {
+    "react": "^18 || ^19",
     "typescript": "^5"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18"

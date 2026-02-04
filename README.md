@@ -59,6 +59,8 @@
   - [Best Practices](#best-practices)
   - [Key Rotation](#key-rotation)
   - [Threat Model](#threat-model)
+- [Integrations](#integrations)
+  - [React](#react)
 - [Comparison](#comparison)
 - [Troubleshooting](#troubleshooting)
 - [TypeScript](#typescript)
@@ -854,6 +856,58 @@ Relic does NOT protect against:
 - ❌ Master key compromise
 - ❌ Memory inspection on running processes
 - ❌ Compromised deployment environment
+
+---
+
+## Integrations
+
+### React
+
+Relic provides a React integration for passing public secrets to client components via context.
+
+```bash
+# Install (react is a peer dependency)
+npm install @nick-skriabin/relic react
+```
+
+**Server Component (Next.js):**
+
+```tsx
+// app/layout.tsx
+import { relic } from "@/lib/relic";
+import { RelicProvider } from "@nick-skriabin/relic/react";
+
+export default async function RootLayout({ children }) {
+  const secrets = await relic.loadPublic();
+
+  return (
+    <html>
+      <body>
+        <RelicProvider secrets={secrets}>{children}</RelicProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+**Client Component:**
+
+```tsx
+"use client";
+import { useRelic } from "@nick-skriabin/relic/react";
+
+function MyComponent() {
+  // Get all public secrets
+  const secrets = useRelic();
+
+  // Or get a single key (throws if missing)
+  const apiUrl = useRelic("API_URL");
+
+  return <div>{apiUrl}</div>;
+}
+```
+
+`useRelic()` throws if used outside of `<RelicProvider>`. `useRelic(key)` throws if the key doesn't exist in the provided secrets.
 
 ---
 
