@@ -913,10 +913,12 @@ declare module "@nick-skriabin/relic" {
 }
 ```
 
-Add a reference to the generated file (e.g. in your entry point or a global `.d.ts`):
+If your `tsconfig.json` includes `config/` (most do by default), the types are picked up automatically. Otherwise, add it:
 
-```typescript
-/// <reference path="./config/relic.d.ts" />
+```json
+{
+  "include": ["src", "config/relic.d.ts"]
+}
 ```
 
 Now `load()` and `loadPublic()` return typed results automatically — no casting needed:
