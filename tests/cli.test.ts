@@ -493,6 +493,128 @@ EOF
     });
   });
 
+  describe("relic rotate", () => {
+    test("rotates master key and re-encrypts artifact", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/relic.enc");
+      const editorScript = testPath("editor.sh");
+
+      // Create editor script that adds secrets
+      writeFileSync(
+        editorScript,
+        `#!/bin/bash
+cat > "$1" << 'EOF'
+{
+  "API_KEY": "my-secret-api-key",
+  "DB_PASSWORD": "super-secret"
+}
+EOF
+`,
+        { mode: 0o755 }
+      );
+
+      // Initialize and edit to create initial artifact
+      const initProc = Bun.spawn(["bun", "run", CLI_PATH, "init", "--key-file", keyFile, "--file", artifactFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await initProc.exited;
+
+      const editProc = Bun.spawn(["bun", "run", CLI_PATH, "edit", "--file", artifactFile, "--key-file", keyFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
+        env: {
+          ...process.env,
+          RELIC_EDITOR: editorScript,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await editProc.exited;
+
+      // Read the original key
+      const originalKey = readFileSync(keyFile, "utf-8").trim();
+
+      // Rotate the key
+      const rotateProc = Bun.spawn(["bun", "run", CLI_PATH, "rotate", "--file", artifactFile, "--key-file", keyFile, "--iterations", String(TEST_ITERATIONS)], {
+        cwd: TEST_DIR,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await rotateProc.exited;
+      const stdout = await new Response(rotateProc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("Generated new master key");
+      expect(stdout).toContain("Re-encrypted secrets");
+
+      // Read the new key
+      const newKey = readFileSync(keyFile, "utf-8").trim();
+      expect(newKey).not.toBe(originalKey);
+
+      // Verify artifact can be decrypted with new key
+      const artifact = readFileSync(artifactFile, "utf-8");
+      const decrypted = await decryptPayload(newKey, artifact);
+      const data = JSON.parse(decrypted);
+
+      expect(data.API_KEY).toBe("my-secret-api-key");
+      expect(data.DB_PASSWORD).toBe("super-secret");
+
+      // Verify artifact CANNOT be decrypted with old key
+      await expect(decryptPayload(originalKey, artifact)).rejects.toThrow();
+    });
+
+    test("fails if artifact does not exist", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/nonexistent.enc");
+
+      // Create key file only
+      mkdirSync(dirname(keyFile), { recursive: true });
+      writeFileSync(keyFile, "test-key-12345\n", "utf-8");
+
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "rotate", "--file", artifactFile, "--key-file", keyFile], {
+        cwd: TEST_DIR,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await proc.exited;
+      const stderr = await new Response(proc.stderr).text();
+
+      expect(exitCode).not.toBe(0);
+      expect(stderr).toContain("Artifact file not found");
+    });
+
+    test("fails without master key", async () => {
+      const keyFile = testPath("config/relic.key");
+      const artifactFile = testPath("config/relic.enc");
+
+      // Create artifact file only (simulating env var user without key set)
+      mkdirSync(dirname(artifactFile), { recursive: true });
+      writeFileSync(artifactFile, '{"test": "relic:v1:abc"}', "utf-8");
+
+      const proc = Bun.spawn(["bun", "run", CLI_PATH, "rotate", "--file", artifactFile, "--key-file", keyFile], {
+        cwd: TEST_DIR,
+        env: {
+          ...process.env,
+          RELIC_MASTER_KEY: undefined,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await proc.exited;
+      const stderr = await new Response(proc.stderr).text();
+
+      expect(exitCode).not.toBe(0);
+      expect(stderr).toContain("RELIC_MASTER_KEY");
+    });
+  });
+
   describe("relic --print-keys", () => {
     test("prints secret keys without values", async () => {
       const artifactFile = testPath("config/relic.enc");

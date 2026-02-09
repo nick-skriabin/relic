@@ -291,6 +291,9 @@ relic edit
 # Edit a specific file
 relic edit --file ./secrets/production.enc
 
+# Rotate master key (decrypt, generate new key, re-encrypt)
+relic rotate
+
 # List all secret keys (without values)
 relic --print-keys
 
@@ -828,18 +831,18 @@ This format has several advantages:
 To rotate the master key:
 
 ```bash
-# 1. Decrypt with old key
-RELIC_MASTER_KEY=$OLD_KEY npx relic edit
-# (Don't make changes, just save and close)
+npx relic rotate
+```
 
-# 2. Note your decrypted secrets
+This command will:
+1. Decrypt the artifact with the current key
+2. Generate a new master key and save it to `config/relic.key`
+3. Re-encrypt the artifact with the new key
 
-# 3. Delete old artifact and create new with new key
-rm config/relic.enc
-RELIC_MASTER_KEY=$NEW_KEY npx relic edit
-# (Re-enter your secrets)
+After rotation, update the master key in all deployment environments:
 
-# 4. Update master key in all deployment environments
+```bash
+export RELIC_MASTER_KEY=$(cat config/relic.key)
 ```
 
 ### Threat Model

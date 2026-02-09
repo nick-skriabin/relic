@@ -5,6 +5,7 @@
  * Usage:
  *   relic init              Initialize relic for local development
  *   relic edit [--file]     Edit secrets
+ *   relic rotate            Rotate master key
  *   relic --print-keys      Print all secret keys
  */
 
@@ -153,6 +154,8 @@ function parseArgs(): { command: string; file: string; keyFile: string; printKey
       command = "init";
     } else if (arg === "edit") {
       command = "edit";
+    } else if (arg === "rotate") {
+      command = "rotate";
     } else if (arg === "--print-keys") {
       printKeys = true;
       command = "print-keys";
@@ -182,6 +185,7 @@ relic - Rails-credentials-like encrypted secrets for JS apps
 Usage:
   relic init [options]       Initialize relic (generates key file)
   relic edit [options]       Edit secrets (default command)
+  relic rotate [options]     Rotate master key (decrypt, generate new key, re-encrypt)
   relic --print-keys         Print all secret keys (not values)
 
 Options:
@@ -201,6 +205,7 @@ Environment:
 Examples:
   relic init                 Generate key file for local development
   relic edit                 Edit secrets using $EDITOR
+  relic rotate               Rotate master key
   relic --file secrets.enc   Edit a custom secrets file
   relic --print-keys         List all secret keys
 `);
@@ -533,6 +538,68 @@ async function printKeysCommand(filePath: string, keyFile: string): Promise<void
 }
 
 /**
+ * Rotate master key command
+ * Decrypts with current key, generates new key, re-encrypts
+ */
+async function rotateCommand(filePath: string, keyFile: string, iterations?: number): Promise<void> {
+  const keyFilePath = resolve(process.cwd(), keyFile);
+  const absolutePath = resolve(process.cwd(), filePath);
+
+  // Verify artifact exists
+  if (!existsSync(absolutePath)) {
+    console.error(`Error: Artifact file not found: ${filePath}`);
+    console.error("Run 'relic init' first or specify a valid artifact file with --file");
+    process.exit(1);
+  }
+
+  // Get current master key
+  const currentKey = getMasterKey(keyFile);
+
+  // Decrypt with current key
+  let plaintext: string;
+  try {
+    const artifact = readFileSync(absolutePath, "utf-8");
+    plaintext = await decryptPayload(currentKey, artifact);
+  } catch (err) {
+    if (err instanceof RelicError) {
+      console.error(`Error: ${err.message} (${err.code})`);
+    } else if (err instanceof Error) {
+      console.error(`Error: ${err.message}`);
+    }
+    process.exit(1);
+  }
+
+  // Generate new key
+  const newKey = generateKey();
+
+  // Ensure key file directory exists
+  const keyDir = dirname(keyFilePath);
+  if (!existsSync(keyDir)) {
+    mkdirSync(keyDir, { recursive: true });
+  }
+
+  // Write new key to key file
+  writeFileSync(keyFilePath, newKey + "\n", "utf-8");
+  console.log(`✓ Generated new master key: ${keyFile}`);
+
+  // Re-encrypt with new key
+  const encryptOptions = iterations ? { iterations } : undefined;
+  const newArtifact = await encryptPayload(newKey, plaintext, encryptOptions);
+  writeFileSync(absolutePath, newArtifact, "utf-8");
+  console.log(`✓ Re-encrypted secrets: ${filePath}`);
+
+  console.log(`
+Key rotation complete!
+
+⚠️  Important: Update the master key in all deployment environments:
+
+  export RELIC_MASTER_KEY=$(cat ${keyFile})
+
+The old key will no longer work with this artifact.
+`);
+}
+
+/**
  * Main entry point
  */
 async function main(): Promise<void> {
@@ -544,6 +611,9 @@ async function main(): Promise<void> {
       break;
     case "edit":
       await editCommand(file, keyFile, iterations);
+      break;
+    case "rotate":
+      await rotateCommand(file, keyFile, iterations);
       break;
     case "print-keys":
       await printKeysCommand(file, keyFile);
